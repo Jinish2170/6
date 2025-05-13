@@ -1,39 +1,94 @@
 import mysql from 'mysql2/promise';
 import { config } from 'dotenv';
+import crypto from 'crypto';
 
 config();
 
-// Database connection configuration
+// Database connection configuration with optimized settings
 const pool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || 'Secure123!',
     database: 'property_management2',
     waitForConnections: true,
-    connectionLimit: 5,      // Reduced from 10
-    queueLimit: 7,          // Added reasonable queue limit
-    maxIdle: 5,            // Max idle connections
-    idleTimeout: 60000,    // Idle timeout: 60 seconds
+    connectionLimit: 15,      // Increased
+    queueLimit: 30,          // Increased queue limit 
+    maxIdle: 10,             // Increased max idle connections
+    idleTimeout: 60000,     // Idle timeout: 60 seconds
     enableKeepAlive: true,
     keepAliveInitialDelay: 0
 });
 
-export { pool };
+// Monitor connection stats for debugging
+let activeConnections = 0;
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY = 100; // ms
+const CONNECTION_TIMEOUT = 5000; // 5 seconds
 
-// Helper function to execute queries
-export async function query<T>(sql: string, params?: any[]): Promise<T[]> {
-    try {
-        const connection = await pool.getConnection();
+// Export pool and connection monitoring
+export { pool };
+export { activeConnections };
+
+// Connection management functions
+async function getConnectionWithTimeout(): Promise<mysql.PoolConnection> {
+    return new Promise(async (resolve, reject) => {
+        // Set timeout to prevent hanging
+        const timeout = setTimeout(() => {
+            reject(new Error('Timeout getting connection from pool'));
+        }, CONNECTION_TIMEOUT);
+        
         try {
+            const connection = await pool.getConnection();
+            clearTimeout(timeout);
+            resolve(connection);
+        } catch (err) {
+            clearTimeout(timeout);
+            reject(err);
+        }
+    });
+}
+
+// Helper function to execute queries with improved error handling and connection management
+export async function query<T>(sql: string, params?: any[]): Promise<T[]> {
+    let retryCount = 0;
+    let connection;
+    
+    while (retryCount < MAX_RETRY_ATTEMPTS) {
+        try {
+            // Try to get a connection from the pool with timeout
+            connection = await getConnectionWithTimeout();
+            activeConnections++;
+            
+            // Log connection stats for debugging purposes
+            console.log(`DB connections: active=${activeConnections}`);
+            
+            // Execute the query
             const [results] = await connection.execute(sql, params);
             return results as T[];
+        } catch (error: any) {
+            // Check if it's a connection error that can be retried
+            if ((error.message.includes('Queue limit reached') || 
+                 error.message.includes('Timeout getting connection')) && 
+                retryCount < MAX_RETRY_ATTEMPTS - 1) {
+                retryCount++;
+                console.warn(`Retrying database connection (attempt ${retryCount} of ${MAX_RETRY_ATTEMPTS})...`);
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * retryCount));
+                continue;
+            }
+            
+            console.error('Database query error:', error);
+            throw error;
         } finally {
-            connection.release();
+            if (connection) {
+                // Always release the connection back to the pool
+                connection.release();
+                activeConnections--;
+            }
         }
-    } catch (error) {
-        console.error('Database query error:', error);
-        throw error;
     }
+
+    // This should never be reached due to the throw in the catch block
+    throw new Error('Failed to execute query after multiple attempts');
 }
 
 // Type definitions for database entities
@@ -133,11 +188,21 @@ export const db = {
             [id, property.landlord_id, property.title, property.description, property.location, property.price, property.bedrooms, property.bathrooms, property.area, property.status]
         );
         return id;
-    },
-
-    // Property Images
+    },    // Property Images
     async getPropertyImages(property_id: string): Promise<PropertyImage[]> {
         return query('SELECT * FROM property_images WHERE property_id = ?', [property_id]) as Promise<PropertyImage[]>;
+    },
+
+    // Bulk fetch property images for multiple properties
+    async bulkGetPropertyImages(property_ids: string[]): Promise<PropertyImage[]> {
+        if (property_ids.length === 0) return [];
+        
+        // Create placeholders for the IN clause (?, ?, ?)
+        const placeholders = property_ids.map(() => '?').join(',');
+        return query(
+            `SELECT * FROM property_images WHERE property_id IN (${placeholders})`, 
+            property_ids
+        ) as Promise<PropertyImage[]>;
     },
 
     async addPropertyImage(image: Omit<PropertyImage, 'id' | 'created_at'>): Promise<string> {
@@ -147,16 +212,28 @@ export const db = {
             [id, image.property_id, image.image_url, image.is_featured]
         );
         return id;
-    },
-
-    // Features/Amenities
+    },    // Features/Amenities
     async getPropertyFeatures(property_id: string): Promise<Feature[]> {
         return query(
-            `SELECT f.* FROM features f 
+            `SELECT f.*, pf.property_id FROM features f 
              JOIN property_features pf ON f.id = pf.feature_id 
              WHERE pf.property_id = ?`,
             [property_id]
         ) as Promise<Feature[]>;
+    },
+    
+    // Bulk fetch property features for multiple properties
+    async bulkGetPropertyFeatures(property_ids: string[]): Promise<(Feature & { property_id: string })[]> {
+        if (property_ids.length === 0) return [];
+        
+        // Create placeholders for the IN clause (?, ?, ?)
+        const placeholders = property_ids.map(() => '?').join(',');
+        return query(
+            `SELECT f.*, pf.property_id FROM features f 
+             JOIN property_features pf ON f.id = pf.feature_id 
+             WHERE pf.property_id IN (${placeholders})`,
+            property_ids
+        ) as Promise<(Feature & { property_id: string })[]>;
     },
 
     async addPropertyFeature(property_id: string, feature_id: string): Promise<void> {

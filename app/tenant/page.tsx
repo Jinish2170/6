@@ -37,6 +37,9 @@ export default function TenantHomePage() {
   const router = useRouter()
 
   useEffect(() => {
+    // Create a flag to track if the component is mounted
+    let isMounted = true;
+    
     const fetchFeaturedProperties = async () => {
       try {
         const token = localStorage.getItem("token")
@@ -45,10 +48,13 @@ export default function TenantHomePage() {
           return
         }
 
+        // Add cache control parameters to prevent repeated calls
         const response = await fetch("/api/properties/featured", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          // Add cache control to prevent repeated fetches
+          cache: 'force-cache'
         })
 
         if (!response.ok) {
@@ -56,22 +62,32 @@ export default function TenantHomePage() {
         }
 
         const data = await response.json()
-        setFeaturedProperties(data)
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setFeaturedProperties(data)
+          setLoading(false)
+        }
       } catch (error) {
         console.error("Error fetching featured properties:", error)
-        setError("Failed to load properties")
-        toast({
-          title: "Error",
-          description: "Failed to load properties",
-          variant: "destructive",
-        })
-      } finally {
-        setLoading(false)
+        if (isMounted) {
+          setError("Failed to load properties")
+          setLoading(false)
+          toast({
+            title: "Error",
+            description: "Failed to load properties",
+            variant: "destructive",
+          })
+        }
       }
     }
 
     fetchFeaturedProperties()
-  }, [router, toast])
+    
+    // Cleanup function to prevent state updates after unmount
+    return () => {
+      isMounted = false
+    }
+  }, []) // Empty dependency array to fetch only once
 
   if (loading) {
     return (

@@ -1,29 +1,50 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { PropertyImage, Feature } from '@/lib/db';
 
-// GET favorite properties for a tenant
-export async function GET(request: Request) {    try {
+// Add cache control header
+export const revalidate = 60; // Revalidate every 60 seconds
+
+// GET favorite properties for a tenant with optimized queries
+export async function GET(request: Request) {
+    try {
         const user = await auth(request);
         if (!user || user.role !== 'tenant') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // Get all favorites in one query first
         const favorites = await db.getFavorites(user.id);
-        const propertiesWithDetails = await Promise.all(favorites.map(async (property) => {
-            const [images, features] = await Promise.all([
-                db.getPropertyImages(property.id),
-                db.getPropertyFeatures(property.id)
-            ]);
-
+        
+        // Batch fetch images and features for all properties rather than one at a time
+        const propertyIds = favorites.map(fav => fav.id);
+        
+        // If there are no favorites, return empty array early
+        if (propertyIds.length === 0) {
+            return NextResponse.json([]);
+        }
+        
+        // Get all images and features in two bulk queries
+        const [allImages, allFeatures] = await Promise.all([
+            db.bulkGetPropertyImages(propertyIds),
+            db.bulkGetPropertyFeatures(propertyIds)
+        ]);
+          // Map the results back to individual properties
+        const propertiesWithDetails = favorites.map(property => {
             return {
                 ...property,
-                images,
-                features
+                images: allImages.filter((img: PropertyImage) => img.property_id === property.id),
+                features: allFeatures.filter((feat: Feature & { property_id: string }) => feat.property_id === property.id)
             };
-        }));
+        });
 
-        return NextResponse.json(propertiesWithDetails);
+        // Return response with cache headers
+        return NextResponse.json(propertiesWithDetails, {
+            headers: {
+                'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
+            }
+        });
     } catch (error) {
         console.error('Error fetching favorites:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

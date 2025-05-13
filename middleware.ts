@@ -1,12 +1,25 @@
 import { NextResponse } from 'next/server'
 
 export function middleware(request: Request) {
-  // Add a console log to track middleware execution
-  console.log(`Middleware executed for: ${request.url}`)
-
+  // Get the requested URL and check for case issues
+  const url = new URL(request.url)
+  const pathname = url.pathname
+  
+  // Skip middleware for all API endpoints to prevent connection pool issues
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
+  
   const headers = new Headers(request.headers)
   // Remove content-length as it's not reliable with edge functions
   headers.delete('content-length')
+  
+  // Convert any uppercase paths to lowercase
+  if (pathname.toLowerCase() !== pathname) {
+    const correctedUrl = new URL(request.url)
+    correctedUrl.pathname = pathname.toLowerCase()
+    return NextResponse.redirect(correctedUrl)
+  }
 
   return NextResponse.next({
     request: {
@@ -17,9 +30,6 @@ export function middleware(request: Request) {
 
 export const config = {
   matcher: [
-    '/api/upload',
-    '/api/properties/:path*',
-    '/tenant/property/:path*',
-    '/api/favorites'
+    '/((?!_next/static|_next/image|api/|favicon.ico).*)',
   ]
 }

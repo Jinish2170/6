@@ -21,6 +21,18 @@ const nextConfig = {
       {
         source: '/api/properties/:id',
         destination: '/api/properties/:id/',
+      },
+      // Normalize any case inconsistencies
+      {
+        source: '/:path*',
+        destination: '/:path*',
+        has: [
+          {
+            type: 'header',
+            key: 'x-normalized-path',
+            value: 'true',
+          }
+        ]
       }
     ]
   }

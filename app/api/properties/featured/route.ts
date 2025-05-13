@@ -3,6 +3,9 @@ import { db } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { PropertyWithDetails } from '@/lib/types';
 
+// Add cache control headers to prevent repeated requests
+export const revalidate = 3600; // Revalidate at most once per hour
+
 export async function GET(request: Request) {
     try {
         // Get all available properties
@@ -37,7 +40,12 @@ export async function GET(request: Request) {
             })
             .slice(0, 4); // Get top 4 properties
 
-        return NextResponse.json(featuredProperties);
+        // Return response with cache control headers
+        return NextResponse.json(featuredProperties, {
+            headers: {
+                'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200'
+            }
+        });
     } catch (error) {
         console.error('Error fetching featured properties:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

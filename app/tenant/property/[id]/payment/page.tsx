@@ -8,35 +8,142 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Separator } from "@/components/ui/separator"
 import { ChevronLeft, CreditCard, Info } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect, use } from "react"
 
-export default function PaymentPage({ params }: { params: { id: string } }) {
+export default function PaymentPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params)
   const [paymentMethod, setPaymentMethod] = useState("credit-card")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [paymentDetails, setPaymentDetails] = useState({
+    cardNumber: '',
+    cardName: '',
+    expiry: '',
+    cvv: ''
+  })
 
-  // Sample property data
-  const property = {
-    id: params.id,
+  // Fetch real property data
+  const [property, setProperty] = useState({
+    id: resolvedParams.id,
     title: "Modern Apartment with City View",
     location: "Downtown, New York",
     rent: 2500,
     securityDeposit: 2500,
     brokerageFee: 2500,
-  }
+  })
+  
+  // Load property details when component mounts
+  useEffect(() => {
+    const fetchPropertyDetails = async () => {
+      try {
+        const token = localStorage.getItem("token")
+        if (!token) {
+          window.location.href = "/auth/login"
+          return
+        }
+        
+        const response = await fetch(`/api/properties/${resolvedParams.id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          cache: 'no-cache' // Use no-cache to always get fresh data for payment
+        })
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            alert("Property not found. Redirecting to dashboard...")
+            window.location.href = "/tenant"
+            return
+          }
+          throw new Error(`Failed to fetch property: ${response.statusText}`)
+        }
+        
+        const data = await response.json()
+        setProperty({
+          id: data.id,
+          title: data.title,
+          location: data.location,
+          rent: data.price,
+          securityDeposit: data.price, // Assuming security deposit equals one month's rent
+          brokerageFee: data.price, // Assuming brokerage fee equals one month's rent
+        })
+      } catch (error) {
+        console.error("Error fetching property details:", error)
+        alert("Error loading property details. Please try again later.")
+        window.location.href = "/tenant"
+      }
+    }
+    
+    fetchPropertyDetails()
+    
+    // Cleanup function
+    return () => {
+      // Cleanup any subscriptions or async tasks if needed
+    }
+  }, [resolvedParams.id])
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     setIsProcessing(true)
-    // Simulate payment processing
-    setTimeout(() => {
-      window.location.href = `/tenant/property/${params.id}/payment/success`
-    }, 2000)
+    
+    try {
+      // In a real application, you would call an API endpoint to process the payment
+      
+      // Check if required fields are filled (basic validation)
+      if (paymentMethod === "credit-card") {
+        if (!paymentDetails.cardNumber) {
+          throw new Error("Please enter your card number")
+        }
+        if (!paymentDetails.cardName) {
+          throw new Error("Please enter the name on your card")
+        }
+        if (!paymentDetails.expiry) {
+          throw new Error("Please enter your card expiry date")
+        }
+        if (!paymentDetails.cvv) {
+          throw new Error("Please enter your card security code (CVV)")
+        }
+        
+        // Basic card number validation
+        if (!/^\d{16}$/.test(paymentDetails.cardNumber.replace(/\s/g, ''))) {
+          throw new Error("Please enter a valid 16-digit card number")
+        }
+        
+        // Basic expiry date validation (MM/YY format)
+        if (!/^(0[1-9]|1[0-2])\/([0-9]{2})$/.test(paymentDetails.expiry)) {
+          throw new Error("Please enter a valid expiry date in MM/YY format")
+        }
+        
+        // Basic CVV validation (3-4 digits)
+        if (!/^\d{3,4}$/.test(paymentDetails.cvv)) {
+          throw new Error("Please enter a valid 3 or 4 digit CVV code")
+        }
+      }
+      
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Save payment confirmation to local storage for reference
+      localStorage.setItem('paymentConfirmation', JSON.stringify({
+        propertyId: property.id,
+        propertyTitle: property.title,
+        amount: property.securityDeposit + property.rent + property.brokerageFee,
+        date: new Date().toISOString(),
+        paymentMethod: paymentMethod
+      }))
+      
+      // Redirect to success page
+      window.location.href = `/tenant/property/${resolvedParams.id}/payment/success`
+    } catch (error) {
+      console.error("Payment processing error:", error)
+      alert(error instanceof Error ? error.message : "Payment processing failed. Please try again.")
+      setIsProcessing(false)
+    }
   }
 
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="mb-6">
         <Link
-          href={`/tenant/property/${params.id}`}
+          href={`/tenant/property/${resolvedParams.id}/`}
           className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
         >
           <ChevronLeft className="mr-2 h-4 w-4" />
@@ -97,21 +204,45 @@ export default function PaymentPage({ params }: { params: { id: string } }) {
                   <h3 className="text-lg font-medium">Card Information</h3>
                   <div className="space-y-2">
                     <Label htmlFor="card-number">Card Number</Label>
-                    <Input id="card-number" placeholder="1234 5678 9012 3456" className="h-12 rounded-xl" />
+                    <Input 
+                      id="card-number" 
+                      placeholder="1234 5678 9012 3456" 
+                      className="h-12 rounded-xl" 
+                      value={paymentDetails.cardNumber}
+                      onChange={(e) => setPaymentDetails({...paymentDetails, cardNumber: e.target.value})}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="expiry">Expiry Date</Label>
-                      <Input id="expiry" placeholder="MM/YY" className="h-12 rounded-xl" />
+                      <Input 
+                        id="expiry" 
+                        placeholder="MM/YY" 
+                        className="h-12 rounded-xl" 
+                        value={paymentDetails.expiry}
+                        onChange={(e) => setPaymentDetails({...paymentDetails, expiry: e.target.value})}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="cvc">CVC</Label>
-                      <Input id="cvc" placeholder="123" className="h-12 rounded-xl" />
+                      <Input 
+                        id="cvc" 
+                        placeholder="123" 
+                        className="h-12 rounded-xl"
+                        value={paymentDetails.cvv} 
+                        onChange={(e) => setPaymentDetails({...paymentDetails, cvv: e.target.value})}
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="name">Name on Card</Label>
-                    <Input id="name" placeholder="John Doe" className="h-12 rounded-xl" />
+                    <Input 
+                      id="name" 
+                      placeholder="John Doe" 
+                      className="h-12 rounded-xl" 
+                      value={paymentDetails.cardName}
+                      onChange={(e) => setPaymentDetails({...paymentDetails, cardName: e.target.value})}
+                    />
                   </div>
                 </div>
               )}

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { PropertyWithDetails } from '@/lib/types';
 
+// Add cache control headers to prevent repeated requests
+export const revalidate = 300; // Revalidate at most once per 5 minutes
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -22,12 +25,16 @@ export async function GET(
       db.getPropertyFeatures(id)
     ]);
 
-    // Return the property with its details
+    // Return the property with its details and cache headers
     return NextResponse.json({
       ...property,
       images,
       features
-    } as PropertyWithDetails);
+    } as PropertyWithDetails, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
+      }
+    });
     
   } catch (error) {
     console.error('Error fetching property:', error);

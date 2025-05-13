@@ -36,18 +36,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Check for existing user session on mount
   useEffect(() => {
+    let isMounted = true;
     const checkUserSession = async () => {
       try {
         const token = localStorage.getItem("token")
         if (token) {
+          // Add cache control to prevent repeated fetches
           const response = await fetch('/api/auth/me', {
             headers: {
-              'Authorization': `Bearer ${token}`
-            }
+              'Authorization': `Bearer ${token}`,
+              'Cache-Control': 'no-cache' // Only fetch once per session
+            },
+            cache: 'force-cache'
           });
+          
           if (response.ok) {
             const userData = await response.json();
-            setUser(userData);
+            if (isMounted) {
+              setUser(userData);
+            }
           } else {
             localStorage.removeItem("token");
             localStorage.removeItem("user");
@@ -58,11 +65,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     checkUserSession();
+    
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Login function

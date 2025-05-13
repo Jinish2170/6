@@ -4,6 +4,9 @@ import { auth } from '@/lib/auth';
 import { PropertyWithDetails } from '@/lib/types';
 import { propertySchema } from '@/lib/schemas';
 
+// Add cache control headers
+export const revalidate = 300; // Revalidate at most once per 5 minutes
+
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
@@ -27,30 +30,43 @@ export async function GET(request: Request) {
                 ...property,
                 images,
                 features
-            } as PropertyWithDetails);
-        }
-
-        // Otherwise, fetch filtered properties
+            } as PropertyWithDetails, {
+                headers: {
+                    'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
+                }
+            });
+        }        // Otherwise, fetch filtered properties
         const properties = await db.getProperties({ 
             status: status || undefined,
             landlord_id: landlordId || undefined
         });
+        
+        // If no properties found, return empty array
+        if (properties.length === 0) {
+            return NextResponse.json([]);
+        }
 
-        // Fetch images and features for each property
-        const propertiesWithDetails = await Promise.all(properties.map(async (property) => {
-            const [images, features] = await Promise.all([
-                db.getPropertyImages(property.id),
-                db.getPropertyFeatures(property.id)
-            ]);
+        // Batch fetch images and features for all properties
+        const propertyIds = properties.map(property => property.id);
+        const [allImages, allFeatures] = await Promise.all([
+            db.bulkGetPropertyImages(propertyIds),
+            db.bulkGetPropertyFeatures(propertyIds)
+        ]);
 
+        // Map images and features to their properties
+        const propertiesWithDetails = properties.map(property => {
             return {
                 ...property,
-                images,
-                features
+                images: allImages.filter(img => img.property_id === property.id),
+                features: allFeatures.filter(feat => feat.property_id === property.id)
             } as PropertyWithDetails;
-        }));
+        });
 
-        return NextResponse.json(propertiesWithDetails);
+        return NextResponse.json(propertiesWithDetails, {
+            headers: {
+                'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
+            }
+        });
     } catch (error) {
         console.error('Error fetching properties:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

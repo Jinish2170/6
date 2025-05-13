@@ -6,6 +6,9 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/auth-context"
 import { Toaster } from "@/components/ui/toaster"
 
+// Initialize database monitoring (only loads in development)
+import "@/lib/db-init"
+
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {

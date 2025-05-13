@@ -42,31 +42,50 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   const [property, setProperty] = useState<PropertyWithDetails | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isFavorite, setIsFavorite] = useState(false)
 
   const fetchPropertyData = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
       
+      // Add a token for authorization
+      const token = localStorage.getItem("token")
+      if (!token) {
+        router.push("/auth/login")
+        return
+      }
+      
       const response = await fetch(`/api/properties/${resolvedParams.id}`, {
-        // Add cache: 'no-store' to ensure we always get fresh data
-        cache: 'no-store',
-        next: { revalidate: 0 }
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        // Use proper cache settings
+        cache: 'force-cache'
       })
       
       if (!response.ok) {
         if (response.status === 404) {
           return notFound()
         } else {
-          throw new Error("Failed to load property data")
+          throw new Error(`Failed to load property data: ${response.status}`)
         }
       }
       
       const data = await response.json()
       setProperty(data)
+      
+      // Check if property is in favorites
+      checkIfFavorite(token)
     } catch (err) {
       console.error("Error fetching property:", err)
-      setError("An unexpected error occurred")
+      setError("An unexpected error occurred while loading property data")
+      
+      toast({
+        title: "Error",
+        description: "Failed to load property details. Redirecting to dashboard...",
+        variant: "destructive",
+      })
       
       // After a delay, navigate back to dashboard if there's an error
       setTimeout(() => {
@@ -75,16 +94,44 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     } finally {
       setIsLoading(false)
     }
-  }, [resolvedParams.id, router])
+  }, [resolvedParams.id, router, toast])
 
   useEffect(() => {
+    let isMounted = true;
+    
     if (resolvedParams.id) {
-      fetchPropertyData()
+      fetchPropertyData();
     }
-  }, [resolvedParams.id, fetchPropertyData])
+    
+    // Clean up function to prevent memory leaks
+    return () => {
+      isMounted = false;
+    };
+  }, [resolvedParams.id, fetchPropertyData]);
 
-  // Loading state
-  if (isLoading) {
+  // Check if property is in favorites
+  const checkIfFavorite = async (token: string) => {
+    try {
+      const response = await fetch('/api/favorites', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (response.ok) {
+        const favorites = await response.json()
+        // Check if current property is in favorites
+        const isFav = favorites.some((fav: any) => fav.id === resolvedParams.id)
+        setIsFavorite(isFav)
+      }
+    } catch (error) {
+      console.error("Error checking favorites:", error)
+      // Don't set any error state, just log it since this is not critical
+    }
+  }
+
+  // Improved error state
+  if (error) {
     return (
       <div className="container mx-auto px-4 py-6">
         <div className="mb-6">
@@ -93,8 +140,18 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             Back to dashboard
           </Link>
         </div>
-        <div className="flex h-[70vh] items-center justify-center">
-          <div className="h-16 w-16 animate-spin rounded-full border-4 border-teal-600 border-t-transparent"></div>
+        <div className="flex flex-col items-center justify-center rounded-[1.5rem] border-0 bg-red-50 p-8 text-center shadow-md">
+          <div className="mb-4 rounded-full bg-red-100 p-3">
+            <Info className="h-6 w-6 text-red-600" />
+          </div>
+          <h3 className="mb-2 text-xl font-bold text-red-600">Error Loading Property</h3>
+          <p className="mb-4 text-gray-600">{error}</p>
+          <Button 
+            className="rounded-full bg-teal-600 hover:bg-teal-700"
+            onClick={() => router.push('/tenant')}
+          >
+            Return to Dashboard
+          </Button>
         </div>
       </div>
     )
@@ -149,24 +206,58 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     })
   }
 
-  // Add to favorites
+  // Add or remove from favorites
   const handleAddToFavorites = async () => {
     try {
-      const response = await fetch('/api/favorites', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ propertyId: property.id }),
-      })
-
-      if (response.ok) {
+      // Get authentication token
+      const token = localStorage.getItem("token")
+      if (!token) {
         toast({
-          title: "Added to Favorites",
-          description: "This property has been added to your favorites",
+          title: "Authentication Required",
+          description: "Please login to add properties to favorites",
+          variant: "destructive",
         })
+        return
+      }
+      
+      if (isFavorite) {
+        // Remove from favorites
+        const response = await fetch(`/api/favorites?propertyId=${resolvedParams.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          setIsFavorite(false)
+          toast({
+            title: "Removed from Favorites",
+            description: "This property has been removed from your favorites",
+          })
+        } else {
+          throw new Error('Failed to remove from favorites')
+        }
       } else {
-        throw new Error('Failed to add to favorites')
+        // Add to favorites
+        const response = await fetch('/api/favorites', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ propertyId: resolvedParams.id }),
+        })
+
+        if (response.ok) {
+          setIsFavorite(true)
+          toast({
+            title: "Added to Favorites",
+            description: "This property has been added to your favorites",
+          })
+        } else {
+          throw new Error('Failed to add to favorites')
+        }
       }
     } catch (err) {
       toast({
@@ -209,15 +300,21 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
               className="object-cover"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1200px"
               priority
+              onError={(e) => {
+                // Replace broken images with placeholder
+                e.currentTarget.src = PLACEHOLDER_IMAGE;
+              }}
             />
             <Button
               variant="ghost"
               size="icon"
-              className="absolute right-4 top-4 h-10 w-10 rounded-full bg-white/80 text-gray-600 hover:bg-white hover:text-red-500"
-              aria-label="Add to favorites"
+              className={`absolute right-4 top-4 h-10 w-10 rounded-full bg-white/80 ${
+                isFavorite ? 'text-red-500 hover:text-red-700' : 'text-gray-600 hover:text-red-500'
+              }`}
+              aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
               onClick={handleAddToFavorites}
             >
-              <Heart className="h-5 w-5" />
+              <Heart className={`h-5 w-5 ${isFavorite ? 'fill-current' : ''}`} />
             </Button>
             <Button
               variant="ghost"
@@ -265,6 +362,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                   fill 
                   className="object-cover"
                   sizes="96px"
+                  onError={(e) => {
+                    // Replace broken images with placeholder
+                    e.currentTarget.src = PLACEHOLDER_IMAGE;
+                  }}
                 />
               </button>
             ))}
@@ -416,10 +517,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
               <div className="mb-6 space-y-4">
                 <h3 className="text-lg font-bold">Interested in this property?</h3>
                 <Button className="w-full rounded-full bg-teal-600 hover:bg-teal-700" asChild>
-                  <Link href={`/tenant/property/${property.id}/payment/`} prefetch={true}>Pay Deposit</Link>
+                  <Link href={`/tenant/property/${resolvedParams.id}/payment/`} prefetch={true}>Pay Deposit</Link>
                 </Button>
                 <Button variant="outline" className="w-full rounded-full" asChild>
-                  <Link href={`/tenant/messages/?property=${property.id}`} prefetch={true}>
+                  <Link href={`/tenant/messages/?property=${resolvedParams.id}`} prefetch={true}>
                     <MessageSquare className="mr-2 h-4 w-4" />
                     Send Inquiry
                   </Link>
