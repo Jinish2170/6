@@ -202,7 +202,7 @@ export default function TenantHomePage() {
               {featuredProperties
             .filter((p) => p.status === "AVAILABLE")
             .map((property) => (
-                <Link href={`/tenant/property/${property.id}`} key={property.id}>
+                <Link href={`/tenant/property/${property.id}/`} key={property.id} prefetch={true}>
                   <Card className="h-full overflow-hidden rounded-[1.5rem] border-0 shadow-md transition-all hover:-translate-y-1 hover:shadow-lg">
                     <div className="relative">
                       <Image

@@ -5,6 +5,7 @@ import TenantNavigation from "@/components/tenant/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
+import ErrorBoundary from "@/components/error-boundary"
 
 export default function TenantLayout({
   children,
@@ -33,7 +34,9 @@ export default function TenantLayout({
   return (
     <div className="min-h-screen bg-gray-50">
       <TenantNavigation />
-      <main className="pb-20 md:pb-0">{children}</main>
+      <ErrorBoundary>
+        <main className="pb-20 md:pb-0">{children}</main>
+      </ErrorBoundary>
     </div>
   )
 }
