@@ -11,7 +11,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Download,
   Heart,
   Info,
   MapPin,
@@ -190,7 +189,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   }
 
   // Schedule a visit
-  const handleScheduleVisit = () => {
+  const handleScheduleVisit = async () => {
     if (!date) {
       toast({
         title: "Please select a date",
@@ -200,10 +199,52 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
       return
     }
 
-    toast({
-      title: "Visit Scheduled",
-      description: `Your visit has been scheduled for ${format(date, "PPP")}. A representative will contact you shortly.`,
-    })
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        toast({
+          title: "Authentication Required",
+          description: "Please login to schedule a visit",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const response = await fetch('/api/visits', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          propertyId: resolvedParams.id,
+          visitDate: date.toISOString(),
+          message: `Visit request for ${property?.title || 'property'}`
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to schedule visit')
+      }
+
+      const result = await response.json()
+
+      toast({
+        title: "Visit Scheduled Successfully!",
+        description: result.message || `Your visit has been scheduled for ${format(date, "PPP")}. The landlord will contact you shortly.`,
+      })
+
+      // Reset the date picker
+      setDate(undefined)
+
+    } catch (error) {
+      console.error('Error scheduling visit:', error)
+      toast({
+        title: "Error",
+        description: "Failed to schedule visit. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   // Add or remove from favorites
@@ -269,7 +310,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   }
 
   // Calculate total move-in cost
-  const totalMoveInCost = property.price * 2 // Assuming security deposit equals one month's rent
+  const totalMoveInCost = Number(property.price || 0) * 2 // Assuming security deposit equals one month's rent
 
   // Get featured image or first image
   const featuredImage = property.images?.find(img => img.is_featured)?.image_url || 
@@ -379,7 +420,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           <div className="mb-6">
             <div className="mb-2 flex items-center justify-between">
               <h1 className="text-2xl font-bold md:text-3xl">{property.title}</h1>
-              <p className="ml-4 whitespace-nowrap text-xl font-bold text-teal-600">${property.price}/mo</p>
+              <p className="ml-4 whitespace-nowrap text-xl font-bold text-teal-600">${Number(property.price || 0).toLocaleString()}/mo</p>
             </div>
             <div className="mb-4 flex items-center text-gray-500">
               <MapPin className="mr-1 h-4 w-4" />
@@ -404,7 +445,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           </div>
 
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="mb-6 grid w-full grid-cols-4 rounded-full">
+            <TabsList className="mb-6 grid w-full grid-cols-2 rounded-full">
               <TabsTrigger
                 value="overview"
                 className="rounded-full data-[state=active]:bg-teal-600 data-[state=active]:text-white"
@@ -417,18 +458,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
               >
                 Amenities
               </TabsTrigger>
-              <TabsTrigger
-                value="floorplan"
-                className="rounded-full data-[state=active]:bg-teal-600 data-[state=active]:text-white"
-              >
-                Floor Plan
-              </TabsTrigger>
-              <TabsTrigger
-                value="tour"
-                className="rounded-full data-[state=active]:bg-teal-600 data-[state=active]:text-white"
-              >
-                Virtual Tour
-              </TabsTrigger>
             </TabsList>
             <TabsContent value="overview" className="mt-0">
               <Card className="rounded-[1.5rem] border-0 shadow-md">
@@ -439,16 +468,16 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                   <div className="space-y-2 text-gray-600">
                     <div className="flex justify-between">
                       <span>Monthly Rent</span>
-                      <span className="font-medium">${property.price}</span>
+                      <span className="font-medium">${Number(property.price || 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Security Deposit</span>
-                      <span className="font-medium">${property.price}</span>
+                      <span className="font-medium">${Number(property.price || 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between border-t border-gray-200 pt-2">
                       <span className="font-bold">Total Move-in Cost</span>
                       <span className="font-bold text-teal-600">
-                        ${totalMoveInCost}
+                        ${totalMoveInCost.toLocaleString()}
                       </span>
                     </div>
                   </div>
@@ -474,40 +503,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                 </CardContent>
               </Card>
             </TabsContent>
-            <TabsContent value="floorplan" className="mt-0">
-              <Card className="rounded-[1.5rem] border-0 shadow-md">
-                <CardContent className="p-6">
-                  <h3 className="mb-4 text-lg font-bold">Floor Plan</h3>
-                  <div className="flex flex-col items-center">
-                    <div className="relative h-[400px] w-full max-w-[600px]">
-                      <Image
-                        src="/placeholder.svg?height=400&width=600"
-                        alt="Floor Plan"
-                        fill
-                        className="rounded-xl object-contain"
-                      />
-                    </div>
-                    <Button variant="outline" className="mt-4 flex items-center gap-2 rounded-full">
-                      <Download className="h-4 w-4" />
-                      Download Floor Plan PDF
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-            <TabsContent value="tour" className="mt-0">
-              <Card className="rounded-[1.5rem] border-0 shadow-md">
-                <CardContent className="p-6">
-                  <h3 className="mb-4 text-lg font-bold">Virtual Tour</h3>
-                  <div className="flex aspect-video w-full items-center justify-center rounded-xl bg-gray-100">
-                    <div className="text-center">
-                      <p className="mb-2 text-gray-500">Virtual tour would be displayed here</p>
-                      <Button className="rounded-full bg-teal-600 hover:bg-teal-700">Start Virtual Tour</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
         </div>
 
@@ -515,43 +510,82 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           <Card className="sticky top-20 rounded-[1.5rem] border-0 shadow-md">
             <CardContent className="p-6">
               <div className="mb-6 space-y-4">
-                <h3 className="text-lg font-bold">Interested in this property?</h3>
-                <Button className="w-full rounded-full bg-teal-600 hover:bg-teal-700" asChild>
-                  <Link href={`/tenant/property/${resolvedParams.id}/payment/`} prefetch={true}>Pay Deposit</Link>
-                </Button>
+                <h3 className="text-lg font-bold">
+                  {property.status === 'RENTED' ? 'Property Status' : 'Ready to rent this property?'}
+                </h3>
+                
+                {property.status === 'RENTED' ? (
+                  <div className="rounded-xl bg-red-50 p-4 text-center">
+                    <p className="mb-2 text-lg font-bold text-red-800">
+                      🏠 Property Already Rented
+                    </p>
+                    <p className="text-sm text-red-700">
+                      This property is no longer available for rent
+                    </p>
+                  </div>
+                ) : property.status === 'MAINTENANCE' ? (
+                  <div className="rounded-xl bg-yellow-50 p-4 text-center">
+                    <p className="mb-2 text-lg font-bold text-yellow-800">
+                      🔧 Under Maintenance
+                    </p>
+                    <p className="text-sm text-yellow-700">
+                      This property is currently under maintenance
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-xl bg-teal-50 p-4 text-center">
+                      <p className="mb-2 text-sm text-teal-700">
+                        Secure this property with a simple payment process
+                      </p>
+                      <p className="text-lg font-bold text-teal-800">
+                        Total: ${totalMoveInCost.toLocaleString()}
+                      </p>
+                    </div>
+                    <Button className="w-full rounded-full bg-teal-600 hover:bg-teal-700" asChild>
+                      <Link href={`/tenant/property/${resolvedParams.id}/payment/`} prefetch={true}>
+                        Rent This Property
+                      </Link>
+                    </Button>
+                  </>
+                )}
+                
                 <Button variant="outline" className="w-full rounded-full" asChild>
                   <Link href={`/tenant/messages/?property=${resolvedParams.id}`} prefetch={true}>
                     <MessageSquare className="mr-2 h-4 w-4" />
-                    Send Inquiry
+                    {property.status === 'RENTED' ? 'Contact Owner' : 'Ask Questions'}
                   </Link>
                 </Button>
               </div>
-              <div className="space-y-4">
-                <h3 className="text-lg font-bold">Schedule a Visit</h3>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start rounded-xl text-left font-normal">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {date ? format(date, "PPP") : "Pick a date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
-                  </PopoverContent>
-                </Popover>
-                <Button 
-                  className="w-full rounded-full bg-teal-600 hover:bg-teal-700"
-                  onClick={handleScheduleVisit}
-                >
-                  Schedule Visit
-                </Button>
-                <div className="flex items-start gap-2 rounded-xl bg-gray-50 p-3 text-sm">
-                  <Info className="mt-0.5 h-4 w-4 text-gray-500" />
-                  <p className="text-gray-600">
-                    A representative will contact you to confirm your visit after scheduling.
-                  </p>
+              
+              {property.status === 'AVAILABLE' && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold">Schedule a Visit</h3>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start rounded-xl text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {date ? format(date, "PPP") : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                  <Button 
+                    className="w-full rounded-full bg-teal-600 hover:bg-teal-700"
+                    onClick={handleScheduleVisit}
+                  >
+                    Schedule Visit
+                  </Button>
+                  <div className="flex items-start gap-2 rounded-xl bg-gray-50 p-3 text-sm">
+                    <Info className="mt-0.5 h-4 w-4 text-gray-500" />
+                    <p className="text-gray-600">
+                      Visit the property before renting. Our team will contact you to confirm your visit.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>

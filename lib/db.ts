@@ -132,6 +132,18 @@ export interface Feature {
     icon_name: string;
 }
 
+export interface PropertyVisit {
+    id: string;
+    property_id: string;
+    tenant_id: string;
+    landlord_id: string;
+    visit_date: Date;
+    status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+    message?: string;
+    created_at: Date;
+    updated_at: Date;
+}
+
 // Database access functions
 export const db = {
     // Features
@@ -170,10 +182,16 @@ export const db = {
             `UPDATE users SET ${setClause} WHERE id = ?`,
             [...values, id]
         );
-    },
-
-    // Property related queries
-    async getProperties(filters?: { status?: string; landlord_id?: string }): Promise<Property[]> {
+    },    // Property related queries
+    async getProperties(filters?: { 
+        status?: string; 
+        landlord_id?: string;
+        location?: string;
+        minPrice?: number;
+        maxPrice?: number;
+        bedrooms?: number;
+        bathrooms?: number;
+    }): Promise<Property[]> {
         let sql = 'SELECT * FROM properties WHERE 1=1';
         const params: any[] = [];
 
@@ -185,6 +203,34 @@ export const db = {
             sql += ' AND landlord_id = ?';
             params.push(filters.landlord_id);
         }
+        if (filters?.location) {
+            sql += ' AND location LIKE ?';
+            params.push(`%${filters.location}%`);
+        }
+        if (filters?.minPrice !== undefined) {
+            sql += ' AND price >= ?';
+            params.push(filters.minPrice);
+        }
+        if (filters?.maxPrice !== undefined) {
+            sql += ' AND price <= ?';
+            params.push(filters.maxPrice);
+        }
+        if (filters?.bedrooms !== undefined) {
+            if (filters.bedrooms >= 4) {
+                sql += ' AND bedrooms >= ?';
+                params.push(4);
+            } else {
+                sql += ' AND bedrooms = ?';
+                params.push(filters.bedrooms);
+            }
+        }
+        if (filters?.bathrooms !== undefined) {
+            sql += ' AND bathrooms >= ?';
+            params.push(filters.bathrooms);
+        }
+
+        // Add ORDER BY to get consistent results
+        sql += ' ORDER BY created_at DESC';
 
         return query(sql, params) as Promise<Property[]>;
     },
@@ -291,6 +337,13 @@ export const db = {
             [property.title, property.description, property.location, property.price,
              property.bedrooms, property.bathrooms, property.area, property.status,
              id]
+        );
+    },
+
+    async updatePropertyStatus(id: string, status: 'AVAILABLE' | 'RENTED' | 'MAINTENANCE'): Promise<void> {
+        await query(
+            'UPDATE properties SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [status, id]
         );
     },
 

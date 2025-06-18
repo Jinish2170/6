@@ -35,8 +35,29 @@ export default function TenantHomePage() {
   const [favoriteIds, setFavoriteIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [activeCategory, setActiveCategory] = useState("all")
   const { toast } = useToast()
   const router = useRouter()
+
+  // Handle search functionality
+  const handleSearch = (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (searchQuery.trim()) {
+      router.push(`/tenant/search?location=${encodeURIComponent(searchQuery.trim())}`)
+    } else {
+      router.push('/tenant/search')
+    }
+  }
+
+  // Handle Enter key press in search input
+  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch()
+    }
+  }
 
   useEffect(() => {
     // Create a flag to track if the component is mounted
@@ -123,6 +144,68 @@ export default function TenantHomePage() {
     )
   }
 
+  // Filter properties by category
+  const getFilteredProperties = (category: string) => {
+    const availableProperties = featuredProperties.filter((p) => p.status === "AVAILABLE")
+    
+    if (category === "all") {
+      return availableProperties
+    }
+    
+    // Map category to feature names (case-insensitive)
+    const categoryMap: { [key: string]: string[] } = {
+      apartments: ['apartment', 'flat', 'condo'],
+      houses: ['house', 'home', 'townhouse'],
+      villas: ['villa', 'mansion', 'estate']
+    }
+    
+    const searchTerms = categoryMap[category] || [category]
+    
+    return availableProperties.filter((property) => 
+      property.features.some((feature) => 
+        searchTerms.some(term => 
+          feature.name.toLowerCase().includes(term.toLowerCase())
+        )
+      )
+    )
+  }
+
+  // Render properties with empty state
+  const renderPropertiesGrid = (category: string, extraClasses = "") => {
+    const properties = getFilteredProperties(category)
+    
+    if (properties.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="rounded-full bg-gray-100 p-6 mb-4">
+            <Search className="h-8 w-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            No {category === 'all' ? 'properties' : category} found
+          </h3>
+          <p className="text-gray-500 mb-4">
+            {category === 'all' 
+              ? 'No properties are currently available.' 
+              : `No ${category} are currently available.`
+            }
+          </p>
+          <Button 
+            onClick={() => router.push('/tenant/search')}
+            variant="outline"
+          >
+            Browse All Properties
+          </Button>
+        </div>
+      )
+    }
+    
+    return (
+      <div className={`grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 ${extraClasses}`}>
+        {properties.map((property) => renderPropertyCard(property))}
+      </div>
+    )
+  }
+
   // Update all property cards with favorite status
   const renderPropertyCard = (property: Property) => (
     <PropertyCard
@@ -149,15 +232,43 @@ export default function TenantHomePage() {
           <h1 className="text-3xl font-bold md:text-4xl">Find Your Perfect Home</h1>
           <p className="text-teal-50">Thousands of properties waiting for you</p>
           <div className="relative mt-6">
-            <div className="flex flex-col gap-4 md:flex-row">
+            <form onSubmit={handleSearch} className="flex flex-col gap-4 md:flex-row">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
                 <Input
                   placeholder="City, neighborhood, or address"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyPress={handleSearchKeyPress}
                   className="h-12 rounded-full border-0 bg-white pl-10 pr-4 text-gray-900 shadow-md focus-visible:ring-2 focus-visible:ring-white"
                 />
               </div>
-              <Button className="h-12 rounded-full bg-white text-teal-600 hover:bg-teal-50">Search</Button>
+              <Button 
+                type="submit"
+                onClick={handleSearch}
+                className="h-12 rounded-full bg-white text-teal-600 hover:bg-teal-50"
+              >
+                Search
+              </Button>
+            </form>
+            
+            {/* Quick Search Suggestions */}
+            <div className="mt-4 flex flex-wrap gap-2 justify-center">
+              <span className="text-sm text-teal-100">Popular searches:</span>
+              {['Downtown', 'Suburbs', 'University Area', 'City Center', 'Waterfront'].map((location) => (
+                <Button
+                  key={location}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery(location)
+                    router.push(`/tenant/search?location=${encodeURIComponent(location)}`)
+                  }}
+                  className="h-7 rounded-full border border-white/20 bg-white/10 text-xs text-white hover:bg-white/20"
+                >
+                  {location}
+                </Button>
+              ))}
             </div>
           </div>
         </div>
@@ -172,16 +283,19 @@ export default function TenantHomePage() {
           </Link>
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {featuredProperties
-            .filter((p) => p.status === "AVAILABLE")
-            .map((property) => renderPropertyCard(property))}
+          {getFilteredProperties("all").map((property) => renderPropertyCard(property))}
         </div>
       </section>
 
       {/* Property Categories */}
       <section className="mb-8">
-        <h2 className="mb-6 text-2xl font-bold">Browse by Category</h2>
-        <Tabs defaultValue="all" className="w-full">
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-2xl font-bold">Browse by Category</h2>
+          <div className="text-sm text-gray-500">
+            {getFilteredProperties(activeCategory).length} properties found
+          </div>
+        </div>
+        <Tabs value={activeCategory} onValueChange={setActiveCategory} className="w-full">
           <TabsList className="mb-6 grid w-full grid-cols-4 rounded-full">
             <TabsTrigger
               value="all"
@@ -209,32 +323,16 @@ export default function TenantHomePage() {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="all" className="mt-0">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {featuredProperties
-            .filter((p) => p.status === "AVAILABLE")
-            .map((property) => renderPropertyCard(property))}
-            </div>
+            {renderPropertiesGrid("all")}
           </TabsContent>
           <TabsContent value="apartments" className="mt-0">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {featuredProperties
-                .filter((property) => property.features.some((feature) => feature.name === "Apartment"))
-                .map((property) => renderPropertyCard(property))}
-            </div>
+            {renderPropertiesGrid("apartments")}
           </TabsContent>
           <TabsContent value="houses" className="mt-0">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {featuredProperties
-                .filter((property) => property.features.some((feature) => feature.name === "House"))
-                .map((property) => renderPropertyCard(property))}
-            </div>
+            {renderPropertiesGrid("houses")}
           </TabsContent>
           <TabsContent value="villas" className="mt-0">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {featuredProperties
-                .filter((property) => property.features.some((feature) => feature.name === "Villa"))
-                .map((property) => renderPropertyCard(property))}
-            </div>
+            {renderPropertiesGrid("villas")}
           </TabsContent>
         </Tabs>
       </section>

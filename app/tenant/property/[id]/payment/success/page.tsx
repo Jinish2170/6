@@ -50,8 +50,8 @@ export default function PaymentSuccessPage({ params }: { params: Promise<{ id: s
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-teal-100">
             <Check className="h-8 w-8 text-teal-600" />
           </div>
-          <CardTitle className="text-2xl">Payment Successful!</CardTitle>
-          <CardDescription>Your property has been secured</CardDescription>
+          <CardTitle className="text-2xl">🎉 Rental Confirmed!</CardTitle>
+          <CardDescription>Congratulations! The property is now rented to you</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-xl bg-gray-50 p-4">
@@ -81,7 +81,8 @@ export default function PaymentSuccessPage({ params }: { params: Promise<{ id: s
             </div>
           </div>
           <div className="rounded-xl bg-teal-50 p-4 text-center text-teal-800">
-            <p>A confirmation email has been sent to your registered email address with all the details.</p>
+            <p className="font-medium">🏠 Property Status: RENTED</p>
+            <p className="mt-2 text-sm">The property has been successfully rented to you. A confirmation email with lease details has been sent to your registered email address.</p>
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-2">

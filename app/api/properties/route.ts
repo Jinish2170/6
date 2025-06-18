@@ -14,6 +14,11 @@ export async function GET(request: Request) {
         const id = searchParams.get('id');
         const status = searchParams.get('status');
         const landlordId = searchParams.get('landlordId');
+        const location = searchParams.get('location');
+        const minPrice = searchParams.get('minPrice');
+        const maxPrice = searchParams.get('maxPrice');
+        const bedrooms = searchParams.get('bedrooms');
+        const bathrooms = searchParams.get('bathrooms');
 
         // If ID is provided, fetch single property
         if (id) {
@@ -36,11 +41,35 @@ export async function GET(request: Request) {
                     'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
                 }
             });
-        }        // Otherwise, fetch filtered properties
-        const properties = await db.getProperties({ 
-            status: status || undefined,
-            landlord_id: landlordId || undefined
-        });
+        }
+
+        // Build search filters
+        const filters: any = {};
+        
+        if (status) {
+            filters.status = status;
+        }
+        if (landlordId) {
+            filters.landlord_id = landlordId;
+        }
+        if (location) {
+            filters.location = location;
+        }
+        if (minPrice) {
+            filters.minPrice = parseInt(minPrice);
+        }
+        if (maxPrice) {
+            filters.maxPrice = parseInt(maxPrice);
+        }
+        if (bedrooms && bedrooms !== 'any') {
+            filters.bedrooms = bedrooms === '4+' ? 4 : parseInt(bedrooms);
+        }
+        if (bathrooms && bathrooms !== 'any') {
+            filters.bathrooms = parseFloat(bathrooms);
+        }
+
+        // Fetch filtered properties
+        const properties = await db.getProperties(filters);
         
         // If no properties found, return empty array
         if (properties.length === 0) {

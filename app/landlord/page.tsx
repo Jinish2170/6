@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Building, ChevronRight, DollarSign, Home, LineChart, Plus, Users, Wrench } from "lucide-react"
+import { Building, ChevronRight, DollarSign, Home, LineChart, Plus, Users, Wrench, Calendar, Clock, Phone, Mail } from "lucide-react"
 import { ExtendedUser } from "@/lib/types"
 import Image from "next/image"
 import Link from "next/link"
@@ -41,6 +41,19 @@ interface DashboardData {
   user?: ExtendedUser;
 }
 
+interface VisitLog {
+  id: string;
+  tenantName: string;
+  tenantEmail: string;
+  tenantPhone: string | null;
+  propertyTitle: string;
+  propertyLocation: string;
+  visitDate: string;
+  message: string;
+  scheduledAt: string;
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+}
+
 export default function LandlordDashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -54,6 +67,8 @@ export default function LandlordDashboardPage() {
     },
     recentProperties: []
   })
+  const [visits, setVisits] = useState<VisitLog[]>([])
+  const [visitsLoading, setVisitsLoading] = useState(false)
   
   const { user } = useAuth()
   const { toast } = useToast()
@@ -112,6 +127,39 @@ export default function LandlordDashboardPage() {
 
     fetchDashboardData()
   }, [user]) // Only re-run if user changes
+
+  // Fetch scheduled visits
+  const fetchVisits = async () => {
+    if (!user) return;
+    
+    try {
+      setVisitsLoading(true)
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      const response = await fetch('/api/landlord/visits', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setVisits(data.visits || [])
+      }
+    } catch (error) {
+      console.error('Error fetching visits:', error)
+    } finally {
+      setVisitsLoading(false)
+    }
+  }
+
+  // Fetch visits when component mounts
+  useEffect(() => {
+    if (user) {
+      fetchVisits()
+    }
+  }, [user])
 
   if (isLoading) {
     return (
@@ -370,6 +418,93 @@ export default function LandlordDashboardPage() {
                 View All Activities
               </Button>
             </CardFooter>
+          </Card>
+
+          {/* Scheduled Visits */}
+          <Card className="rounded-[1.5rem] border-0 shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-teal-600" />
+                Scheduled Visits
+              </CardTitle>
+              <CardDescription>Recent visit requests from tenants</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {visitsLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-teal-500 border-t-transparent"></div>
+                  </div>
+                ) : visits.length > 0 ? (
+                  visits.slice(0, 3).map((visit) => (
+                    <div key={visit.id} className="flex gap-3 rounded-lg border border-gray-100 p-3">
+                      <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-teal-100">
+                        <Calendar className="h-5 w-5 text-teal-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium">{visit.tenantName}</p>
+                            <p className="text-sm text-gray-500">{visit.propertyTitle}</p>
+                            <p className="text-xs text-gray-400">{visit.propertyLocation}</p>
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              visit.status === 'pending' 
+                                ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+                                : visit.status === 'confirmed'
+                                ? "border-green-200 bg-green-50 text-green-700"
+                                : "border-gray-200 bg-gray-50 text-gray-700"
+                            }
+                          >
+                            {visit.status}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(visit.visitDate).toLocaleDateString('en-US', { 
+                              weekday: 'short', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
+                          </div>
+                          {visit.tenantPhone && (
+                            <div className="flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              {visit.tenantPhone}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            {visit.tenantEmail}
+                          </div>
+                        </div>
+                        {visit.message && visit.message !== 'No additional message' && (
+                          <p className="mt-2 text-sm text-gray-600 italic">"{visit.message}"</p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6">
+                    <div className="mb-3 rounded-lg bg-blue-50 p-4">
+                      <Calendar className="mx-auto h-8 w-8 text-blue-500 mb-2" />
+                      <p className="text-sm text-blue-600 font-medium">No scheduled visits</p>
+                      <p className="text-xs text-blue-500 mt-1">Visit requests will appear here</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+            {visits.length > 3 && (
+              <CardFooter>
+                <Button variant="link" className="w-full text-teal-600" onClick={fetchVisits}>
+                  View All Visits ({visits.length})
+                </Button>
+              </CardFooter>
+            )}
           </Card>
 
           

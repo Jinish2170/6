@@ -24,11 +24,11 @@ export default function PaymentPage({ params }: { params: Promise<{ id: string }
   // Fetch real property data
   const [property, setProperty] = useState({
     id: resolvedParams.id,
-    title: "Modern Apartment with City View",
-    location: "Downtown, New York",
-    rent: 2500,
-    securityDeposit: 2500,
-    brokerageFee: 2500,
+    title: "Loading...",
+    location: "Loading...",
+    rent: 0,
+    securityDeposit: 0,
+    brokerageFee: 0,
   })
   
   // Load property details when component mounts
@@ -62,9 +62,9 @@ export default function PaymentPage({ params }: { params: Promise<{ id: string }
           id: data.id,
           title: data.title,
           location: data.location,
-          rent: data.price,
-          securityDeposit: data.price, // Assuming security deposit equals one month's rent
-          brokerageFee: data.price, // Assuming brokerage fee equals one month's rent
+          rent: Number(data.price) || 0,
+          securityDeposit: Number(data.price) || 0, // Assuming security deposit equals one month's rent
+          brokerageFee: Number(data.price) || 0, // Assuming brokerage fee equals one month's rent
         })
       } catch (error) {
         console.error("Error fetching property details:", error)
@@ -85,9 +85,7 @@ export default function PaymentPage({ params }: { params: Promise<{ id: string }
     setIsProcessing(true)
     
     try {
-      // In a real application, you would call an API endpoint to process the payment
-      
-      // Check if required fields are filled (basic validation)
+      // Basic form validation
       if (paymentMethod === "credit-card") {
         if (!paymentDetails.cardNumber) {
           throw new Error("Please enter your card number")
@@ -118,23 +116,57 @@ export default function PaymentPage({ params }: { params: Promise<{ id: string }
         }
       }
       
-      // Simulate API call delay
+      // Simulate payment processing delay
       await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Get authentication token
+      const token = localStorage.getItem("token")
+      if (!token) {
+        throw new Error("Authentication required. Please login again.")
+      }
+      
+      // Call rental API to complete the property rental
+      const rentalResponse = await fetch('/api/properties/rent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          propertyId: property.id,
+          paymentDetails: {
+            method: paymentMethod,
+            amount: property.securityDeposit + property.rent + property.brokerageFee
+          }
+        }),
+      })
+
+      if (!rentalResponse.ok) {
+        const errorData = await rentalResponse.json()
+        throw new Error(errorData.error || 'Failed to complete rental process')
+      }
+
+      const rentalData = await rentalResponse.json()
       
       // Save payment confirmation to local storage for reference
       localStorage.setItem('paymentConfirmation', JSON.stringify({
         propertyId: property.id,
         propertyTitle: property.title,
-        amount: property.securityDeposit + property.rent + property.brokerageFee,
+        amount: Number(property.securityDeposit) + Number(property.rent) + Number(property.brokerageFee),
         date: new Date().toISOString(),
-        paymentMethod: paymentMethod
+        paymentMethod: paymentMethod,
+        rentalCompleted: true
       }))
+
+      // Show success message
+      alert(`🎉 Payment Completed Successfully!\n\nProperty: ${rentalData.propertyTitle}\nStatus: Property is now rented to you\n\nRedirecting to success page...`)
       
       // Redirect to success page
       window.location.href = `/tenant/property/${resolvedParams.id}/payment/success`
     } catch (error) {
       console.error("Payment processing error:", error)
       alert(error instanceof Error ? error.message : "Payment processing failed. Please try again.")
+    } finally {
       setIsProcessing(false)
     }
   }
@@ -164,7 +196,7 @@ export default function PaymentPage({ params }: { params: Promise<{ id: string }
                 <RadioGroup
                   value={paymentMethod}
                   onValueChange={setPaymentMethod}
-                  className="grid grid-cols-1 gap-4 md:grid-cols-3"
+                  className="grid grid-cols-1 gap-4 md:grid-cols-2"
                 >
                   <div>
                     <RadioGroupItem value="credit-card" id="credit-card" className="peer sr-only" />
@@ -184,16 +216,6 @@ export default function PaymentPage({ params }: { params: Promise<{ id: string }
                     >
                       <CreditCard className="mb-3 h-6 w-6" />
                       <span className="text-sm font-medium">Bank Transfer</span>
-                    </Label>
-                  </div>
-                  <div>
-                    <RadioGroupItem value="upi" id="upi" className="peer sr-only" />
-                    <Label
-                      htmlFor="upi"
-                      className="flex cursor-pointer flex-col items-center justify-between rounded-xl border-2 border-gray-200 p-4 hover:border-teal-600 peer-data-[state=checked]:border-teal-600 peer-data-[state=checked]:bg-teal-50"
-                    >
-                      <CreditCard className="mb-3 h-6 w-6" />
-                      <span className="text-sm font-medium">UPI</span>
                     </Label>
                   </div>
                 </RadioGroup>
@@ -280,29 +302,6 @@ export default function PaymentPage({ params }: { params: Promise<{ id: string }
                   </div>
                 </div>
               )}
-
-              {paymentMethod === "upi" && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">UPI Payment</h3>
-                  <div className="flex flex-col items-center justify-center rounded-xl bg-gray-50 p-6">
-                    <div className="mb-4 h-48 w-48 rounded-xl bg-white p-4">
-                      <div className="flex h-full items-center justify-center">
-                        <p className="text-center text-gray-500">QR Code would appear here</p>
-                      </div>
-                    </div>
-                    <p className="text-center text-sm text-gray-600">
-                      Scan the QR code with your UPI app to make the payment
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="upi-id">Or enter UPI ID</Label>
-                    <div className="flex gap-2">
-                      <Input id="upi-id" placeholder="username@upi" className="h-12 rounded-xl" />
-                      <Button className="h-12 rounded-xl bg-teal-600 hover:bg-teal-700">Pay</Button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </CardContent>
             <CardFooter>
               <Button
@@ -325,28 +324,27 @@ export default function PaymentPage({ params }: { params: Promise<{ id: string }
               <div className="rounded-xl bg-gray-50 p-4">
                 <h3 className="mb-2 font-medium">{property.title}</h3>
                 <p className="text-sm text-gray-500">{property.location}</p>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Security Deposit</span>
-                  <span>${property.securityDeposit.toLocaleString()}</span>
+              </div>                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Security Deposit</span>
+                    <span>${property.securityDeposit.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">First Month's Rent</span>
+                    <span>${property.rent.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Brokerage Fee</span>
+                    <span>${property.brokerageFee.toLocaleString()}</span>
+                  </div>
+                  <Separator className="my-2" />
+                  <div className="flex justify-between font-bold">
+                    <span>Total</span>
+                    <span className="text-teal-600">
+                      ${(Number(property.securityDeposit) + Number(property.rent) + Number(property.brokerageFee)).toLocaleString()}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">First Month's Rent</span>
-                  <span>${property.rent.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Brokerage Fee</span>
-                  <span>${property.brokerageFee.toLocaleString()}</span>
-                </div>
-                <Separator className="my-2" />
-                <div className="flex justify-between font-bold">
-                  <span>Total</span>
-                  <span className="text-teal-600">
-                    ${(property.securityDeposit + property.rent + property.brokerageFee).toLocaleString()}
-                  </span>
-                </div>
-              </div>
               <div className="flex items-start gap-2 rounded-xl bg-gray-50 p-3 text-sm">
                 <Info className="mt-0.5 h-4 w-4 text-gray-500" />
                 <p className="text-gray-600">

@@ -3,17 +3,17 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Bath, Bed, Filter, Heart, MapPin, Search as SearchIcon, Square, X } from "lucide-react"
+import { Bath, Bed, Filter, Heart, MapPin, Search as SearchIcon, Square, RotateCcw, X } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { useToast } from "@/components/ui/use-toast"
+import { useDebounce } from "@/hooks/use-debounce"
 
 type Property = {
   id: string;
@@ -29,85 +29,144 @@ type Property = {
 }
 
 export default function SearchPage() {
-  const [activeFilters, setActiveFilters] = useState<string[]>([])
-  const [viewMode, setViewMode] = useState<"list" | "map">("list")
+  const searchParamsFromUrl = useSearchParams()
   const [properties, setProperties] = useState<Property[]>([])
   const [loading, setLoading] = useState(true)
+  const [searching, setSearching] = useState(false)
   const [error, setError] = useState("")
   const [searchParams, setSearchParams] = useState({
-    location: "",
-    minPrice: 0,
-    maxPrice: 10000,
-    bedrooms: "any",
-    bathrooms: "any"
+    location: searchParamsFromUrl.get('location') || "",
+    minPrice: parseInt(searchParamsFromUrl.get('minPrice') || "0"),
+    maxPrice: parseInt(searchParamsFromUrl.get('maxPrice') || "10000"),
+    bedrooms: searchParamsFromUrl.get('bedrooms') || "any",
+    bathrooms: searchParamsFromUrl.get('bathrooms') || "any",
+    sortBy: searchParamsFromUrl.get('sortBy') || "newest"
   })
   const [favorites, setFavorites] = useState<string[]>([])
+  const { toast } = useToast()
 
-  useEffect(() => {
-    const fetchProperties = async () => {
-      try {
-        const token = localStorage.getItem("token")
-        let url = '/api/properties?status=AVAILABLE'
-        
-        if (searchParams.location) {
-          url += `&location=${encodeURIComponent(searchParams.location)}`
-        }
-        if (searchParams.minPrice > 0) {
-          url += `&minPrice=${searchParams.minPrice}`
-        }
-        if (searchParams.maxPrice < 10000) {
-          url += `&maxPrice=${searchParams.maxPrice}`
-        }
-        if (searchParams.bedrooms !== "any") {
-          url += `&bedrooms=${searchParams.bedrooms}`
-        }
-        if (searchParams.bathrooms !== "any") {
-          url += `&bathrooms=${searchParams.bathrooms}`
-        }
+  // Debounce search parameters to avoid too many API calls
+  const debouncedSearchParams = useDebounce(searchParams, 500)
 
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
-        
-        if (!response.ok) {
-          throw new Error("Failed to fetch properties")
-        }
+  // Calculate active filters count
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (searchParams.location) count++;
+    if (searchParams.minPrice > 0) count++;
+    if (searchParams.maxPrice < 10000) count++;
+    if (searchParams.bedrooms !== "any") count++;
+    if (searchParams.bathrooms !== "any") count++;
+    return count;
+  }, [searchParams]);
 
-        const data = await response.json()
-        setProperties(data)
-      } catch (error) {
-        console.error("Error fetching properties:", error)
-        setError("Failed to load properties")
-      } finally {
-        setLoading(false)
+  const resetFilters = useCallback(() => {
+    setSearchParams({
+      location: "",
+      minPrice: 0,
+      maxPrice: 10000,
+      bedrooms: "any",
+      bathrooms: "any",
+      sortBy: "newest"
+    });
+  }, []);
+
+  const fetchProperties = useCallback(async (params: typeof searchParams) => {
+    try {
+      setSearching(true)
+      const token = localStorage.getItem("token")
+      let url = '/api/properties?status=AVAILABLE'
+      
+      if (params.location) {
+        url += `&location=${encodeURIComponent(params.location)}`
       }
-    }
+      if (params.minPrice > 0) {
+        url += `&minPrice=${params.minPrice}`
+      }
+      if (params.maxPrice < 10000) {
+        url += `&maxPrice=${params.maxPrice}`
+      }
+      if (params.bedrooms !== "any") {
+        url += `&bedrooms=${params.bedrooms}`
+      }
+      if (params.bathrooms !== "any") {
+        url += `&bathrooms=${params.bathrooms}`
+      }
 
-    const fetchFavorites = async () => {
-      try {
-        const token = localStorage.getItem("token")
-        const response = await fetch("/api/favorites", {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
-        
-        if (!response.ok) {
-          throw new Error("Failed to fetch favorites")
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`
         }
+      })
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch properties")
+      }
 
+      const data = await response.json()
+      setProperties(data)
+      setError("")
+    } catch (error) {
+      console.error("Error fetching properties:", error)
+      setError("Failed to load properties")
+      toast({
+        title: "Error",
+        description: "Failed to load properties. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setSearching(false)
+      setLoading(false)
+    }
+  }, [toast])
+
+  const fetchFavorites = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token")
+      const response = await fetch("/api/favorites", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+      
+      if (response.ok) {
         const data = await response.json()
         setFavorites(data.map((p: Property) => p.id))
-      } catch (error) {
-        console.error("Error fetching favorites:", error)
       }
+    } catch (error) {
+      console.error("Error fetching favorites:", error)
     }
+  }, [])
 
-    fetchProperties()
+  // Fetch properties when debounced search params change
+  useEffect(() => {
+    fetchProperties(debouncedSearchParams)
+  }, [debouncedSearchParams, fetchProperties])
+
+  // Fetch favorites on mount
+  useEffect(() => {
     fetchFavorites()
-  }, [searchParams])
+  }, [fetchFavorites])
+
+  // Sort properties based on sortBy parameter
+  const sortedProperties = useMemo(() => {
+    if (!properties.length) return properties;
+    
+    const sorted = [...properties];
+    
+    switch (searchParams.sortBy) {
+      case 'price-low':
+        return sorted.sort((a, b) => Number(a.price) - Number(b.price));
+      case 'price-high':
+        return sorted.sort((a, b) => Number(b.price) - Number(a.price));
+      case 'area-large':
+        return sorted.sort((a, b) => Number(b.area) - Number(a.area));
+      case 'area-small':
+        return sorted.sort((a, b) => Number(a.area) - Number(b.area));
+      case 'newest':
+      default:
+        return sorted; // API already returns newest first
+    }
+  }, [properties, searchParams.sortBy]);
 
   const toggleFavorite = async (propertyId: string) => {
     try {
@@ -132,8 +191,18 @@ export default function SearchPage() {
           ? prev.filter(id => id !== propertyId)
           : [...prev, propertyId]
       )
+
+      toast({
+        title: isFavorite ? "Removed from favorites" : "Added to favorites",
+        description: isFavorite ? "Property removed from your favorites" : "Property added to your favorites"
+      })
     } catch (error) {
       console.error("Error toggling favorite:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update favorites. Please try again.",
+        variant: "destructive"
+      })
     }
   }
 
@@ -155,7 +224,7 @@ export default function SearchPage() {
 
   return (
     <div className="container mx-auto px-4 py-6">
-      {/* Search Bar */}
+      {/* Search Bar and Controls */}
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center">
         <div className="relative flex-1">
           <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -166,21 +235,54 @@ export default function SearchPage() {
             className="h-10 rounded-full border-gray-200 pl-10 pr-4"
           />
         </div>
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button variant="outline" className="flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              Filters
-              {activeFilters.length > 0 && (
-                <Badge variant="secondary" className="ml-2">
-                  {activeFilters.length}
-                </Badge>
-              )}
-            </Button>
-          </SheetTrigger>
+        
+        <div className="flex gap-2">
+          {/* Sort Dropdown */}
+          <Select
+            value={searchParams.sortBy}
+            onValueChange={(value) => setSearchParams(prev => ({ ...prev, sortBy: value }))}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="price-low">Price: Low to High</SelectItem>
+              <SelectItem value="price-high">Price: High to Low</SelectItem>
+              <SelectItem value="area-large">Area: Largest</SelectItem>
+              <SelectItem value="area-small">Area: Smallest</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Filters Sheet */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" className="flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                Filters
+                {activeFiltersCount > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {activeFiltersCount}
+                  </Badge>
+                )}
+              </Button>
+            </SheetTrigger>
           <SheetContent>
             <SheetHeader>
-              <SheetTitle>Search Filters</SheetTitle>
+              <div className="flex items-center justify-between">
+                <SheetTitle>Search Filters</SheetTitle>
+                {activeFiltersCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={resetFilters}
+                    className="flex items-center gap-1"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Reset
+                  </Button>
+                )}
+              </div>
             </SheetHeader>
             <div className="mt-6 flex flex-col gap-6">
               <div>
@@ -189,15 +291,25 @@ export default function SearchPage() {
                   <Input
                     type="number"
                     placeholder="Min"
-                    value={searchParams.minPrice}
-                    onChange={(e) => setSearchParams(prev => ({ ...prev, minPrice: Number(e.target.value) }))}
+                    min="0"
+                    step="100"
+                    value={searchParams.minPrice || ""}
+                    onChange={(e) => setSearchParams(prev => ({ 
+                      ...prev, 
+                      minPrice: e.target.value ? Number(e.target.value) : 0 
+                    }))}
                   />
                   <span>to</span>
                   <Input
                     type="number"
                     placeholder="Max"
-                    value={searchParams.maxPrice}
-                    onChange={(e) => setSearchParams(prev => ({ ...prev, maxPrice: Number(e.target.value) }))}
+                    min="0"
+                    step="100"
+                    value={searchParams.maxPrice === 10000 ? "" : searchParams.maxPrice}
+                    onChange={(e) => setSearchParams(prev => ({ 
+                      ...prev, 
+                      maxPrice: e.target.value ? Number(e.target.value) : 10000 
+                    }))}
                   />
                 </div>
               </div>
@@ -242,10 +354,36 @@ export default function SearchPage() {
           </SheetContent>
         </Sheet>
       </div>
+      </div>
+
+      {/* Results Header */}
+      {!loading && (
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">
+              {searching ? "Searching..." : `${sortedProperties.length} Properties Found`}
+            </h2>
+            {searching && (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-teal-500 border-t-transparent"></div>
+            )}
+          </div>
+          {activeFiltersCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetFilters}
+              className="flex items-center gap-1"
+            >
+              <X className="h-3 w-3" />
+              Clear all filters
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Property Grid */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {properties.map((property) => (
+        {sortedProperties.map((property) => (
           <Card
             key={property.id}
             className="group relative overflow-hidden rounded-[1.5rem] border-0 shadow-md transition-all hover:-translate-y-1 hover:shadow-lg"
@@ -288,7 +426,9 @@ export default function SearchPage() {
                     {property.location}
                   </p>
                 </div>
-                <p className="text-lg font-bold text-teal-600">${property.price}</p>
+                <p className="text-lg font-bold text-teal-600">
+                  ${typeof property.price === 'number' ? property.price.toLocaleString() : property.price}/month
+                </p>
               </div>
 
               <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
@@ -302,7 +442,7 @@ export default function SearchPage() {
                 </div>
                 <div className="flex items-center gap-1">
                   <Square className="h-4 w-4" />
-                  {property.area} sqft
+                  {typeof property.area === 'number' ? property.area.toLocaleString() : property.area} sqft
                 </div>
               </div>
             </CardContent>
@@ -311,11 +451,25 @@ export default function SearchPage() {
       </div>
 
       {/* Empty State */}
-      {properties.length === 0 && (
+      {!loading && !searching && sortedProperties.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12">
           <SearchIcon className="mb-4 h-12 w-12 text-gray-300" />
           <h2 className="mb-2 text-xl font-semibold">No properties found</h2>
-          <p className="text-gray-500">Try adjusting your search filters</p>
+          <p className="text-gray-500 text-center">
+            {activeFiltersCount > 0 
+              ? "Try adjusting your search filters to see more results"
+              : "No available properties match your search"
+            }
+          </p>
+          {activeFiltersCount > 0 && (
+            <Button
+              variant="outline"
+              onClick={resetFilters}
+              className="mt-4"
+            >
+              Clear filters
+            </Button>
+          )}
         </div>
       )}
     </div>
