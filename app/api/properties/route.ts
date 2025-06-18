@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { PropertyWithDetails } from '@/lib/types';
 import { propertySchema } from '@/lib/schemas';
+import { saveUploadedFile } from '@/lib/upload';
 
 // Add cache control headers
 export const revalidate = 300; // Revalidate at most once per 5 minutes
@@ -99,50 +100,56 @@ export async function POST(request: Request) {
                 error: 'Validation failed',
                 issues: validationResult.error.issues 
             }, { status: 400 });
-        }
-
-        // Add landlord_id to validated data
+        }        // Add landlord_id to validated data
         const property = {
             ...validationResult.data,
-            landlord_id: user.id
+            landlord_id: user.id,
+            area: validationResult.data.area ?? null // Ensure area is either a number or null, not undefined
         };
 
-                const propertyId = await db.createProperty(property);
-
-        // Handle image uploads
+        const propertyId = await db.createProperty(property);        // Handle image uploads
         const images = formData.getAll('images') as File[];
+        console.log(`Processing ${images.length} images for property ${propertyId}`);
+        
         if (images.length > 0) {
-            const authHeader = request.headers.get('Authorization') || '';
-            try {
-                await Promise.all(images.map(async (image, index) => {
-                    const formData = new FormData();
-                    formData.append('file', image);
-                    
-                    const uploadResponse = await fetch(new URL('/api/upload', request.url), {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'Authorization': authHeader
+            // Validate that all items are actual files
+            const validImages = images.filter(img => img instanceof File && img.size > 0);
+            
+            if (validImages.length !== images.length) {
+                console.warn(`Found ${images.length - validImages.length} invalid image entries`);
+            }
+              if (validImages.length > 0) {
+                try {
+                    // Process images directly using the upload utility
+                    for (let index = 0; index < validImages.length; index++) {
+                        const image = validImages[index];
+                        console.log(`Processing image ${index + 1}: ${image.name}, size: ${image.size}, type: ${image.type}`);
+                        
+                        // Use the upload utility directly instead of HTTP request
+                        const uploadResult = await saveUploadedFile(image, user.id);
+                        
+                        if (!uploadResult.success) {
+                            throw new Error(`Failed to upload image ${image.name}: ${uploadResult.error}`);
                         }
-                    });
 
-                    if (!uploadResponse.ok) {
-                        throw new Error('Failed to upload image');
+                        if (!uploadResult.url) {
+                            throw new Error(`Upload succeeded but no URL returned for ${image.name}`);
+                        }
+                        
+                        await db.addPropertyImage({
+                            property_id: propertyId,
+                            image_url: uploadResult.url,
+                            is_featured: index === 0
+                        });
+                        
+                        console.log(`Successfully saved image ${index + 1} with URL: ${uploadResult.url}`);
                     }
-
-                    const { url } = await uploadResponse.json();
-                    
-                    await db.addPropertyImage({
-                        property_id: propertyId,
-                        image_url: url,
-                        is_featured: index === 0
-                    });
-                }));
-            } catch (error) {
-                console.error('Error uploading images:', error);
-                // Delete the property if image upload fails
-                await db.deleteProperty(propertyId);
-                throw new Error('Failed to upload images');
+                } catch (error) {
+                    console.error('Error uploading images:', error);
+                    // Delete the property if image upload fails
+                    await db.deleteProperty(propertyId);
+                    throw new Error(`Failed to upload images: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                }
             }
         }
 
@@ -204,12 +211,11 @@ export async function PUT(request: Request) {
                 error: 'Validation failed',
                 issues: validationResult.error.issues 
             }, { status: 400 });
-        }
-
-        // Update property
+        }        // Update property
         await db.updateProperty(propertyId, {
             ...validationResult.data,
-            landlord_id: user.id
+            landlord_id: user.id,
+            area: validationResult.data.area ?? null // Ensure area is either a number or null, not undefined
         });
 
         // Handle features
@@ -221,20 +227,40 @@ export async function PUT(request: Request) {
             await Promise.all(features.map((featureId: string) => 
                 db.addPropertyFeature(propertyId, featureId)
             ));
-        }
-
-        // Handle images
+        }        // Handle images
         const images = formData.getAll('images') as File[];
+        console.log(`Processing ${images.length} images for property update ${propertyId}`);
+        
         if (images.length > 0) {
-            const authHeader = request.headers.get('Authorization') || '';
-            await Promise.all(images.map(async (image, index) => {
-                const imageUrl = await handleImageUpload(image, authHeader);
-                await db.addPropertyImage({
-                    property_id: propertyId,
-                    image_url: imageUrl,
-                    is_featured: index === 0
-                });
-            }));
+            // Validate that all items are actual files
+            const validImages = images.filter(img => img instanceof File && img.size > 0);
+            
+            if (validImages.length !== images.length) {
+                console.warn(`Found ${images.length - validImages.length} invalid image entries`);
+            }
+            
+            if (validImages.length > 0) {
+                const authHeader = request.headers.get('Authorization') || '';
+                try {
+                    // Process images one by one for better error handling
+                    for (let index = 0; index < validImages.length; index++) {
+                        const image = validImages[index];
+                        console.log(`Processing update image ${index + 1}, size: ${image.size} bytes, type: ${image.type}`);
+                        
+                        const imageUrl = await handleImageUpload(image, authHeader, request.url);
+                        await db.addPropertyImage({
+                            property_id: propertyId,
+                            image_url: imageUrl,
+                            is_featured: index === 0
+                        });
+                        
+                        console.log(`Successfully saved update image ${index + 1} with URL: ${imageUrl}`);
+                    }
+                } catch (error) {
+                    console.error('Error uploading images:', error);
+                    throw new Error(`Failed to upload images: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                }
+            }
         }
 
         // Get updated property with details
@@ -288,11 +314,26 @@ export async function DELETE(request: Request) {
     }
 }
 
-async function handleImageUpload(file: File, authHeader: string): Promise<string> {
+async function handleImageUpload(file: File, authHeader: string, requestUrl: string): Promise<string> {
+    if (!(file instanceof File) || file.size === 0) {
+        throw new Error('Invalid file object provided');
+    }
+    
+    console.log(`handleImageUpload called with file: ${file.name}, size: ${file.size}, type: ${file.type}`);
+    
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await fetch('/api/upload', {
+    // Log FormData contents for debugging
+    console.log('handleImageUpload FormData entries:', Array.from(formData.entries()).map(([key, value]) => [key, typeof value, value instanceof File ? `File: ${value.name}` : value]));
+    
+    // Use origin from the request URL to construct the absolute upload URL
+    const url = new URL(requestUrl);
+    const uploadUrl = `${url.origin}/api/upload`;
+    
+    console.log(`Uploading image to ${uploadUrl}, size: ${file.size} bytes, type: ${file.type}`);
+    
+    const response = await fetch(uploadUrl, {
         method: 'POST',
         body: formData,
         headers: {
@@ -301,10 +342,22 @@ async function handleImageUpload(file: File, authHeader: string): Promise<string
     });
 
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to upload image');
+        let errorText;
+        try {
+            const errorData = await response.json();
+            errorText = errorData.error;
+        } catch (e) {
+            errorText = await response.text();
+        }
+        console.error(`Image upload failed: ${errorText}`);
+        throw new Error(`Failed to upload image: ${errorText}`);
     }
 
-    const data = await response.json();
-    return data.url;
+    const responseData = await response.json();
+    
+    if (!responseData.url) {
+        throw new Error('Upload succeeded but no URL was returned');
+    }
+    
+    return responseData.url;
 }

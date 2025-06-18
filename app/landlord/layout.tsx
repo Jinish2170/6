@@ -15,10 +15,15 @@ export default function LandlordLayout({
   const router = useRouter()
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/auth/login")
-    } else if (!isLoading && user && user.role !== "landlord") {
-      router.push(`/${user.role}`)
+    // Only redirect if authentication check is complete
+    if (!isLoading) {
+      if (!user) {
+        // No user, redirect to login
+        router.replace("/auth/login")
+      } else if (user.role !== "landlord") {
+        // Wrong role, redirect to appropriate dashboard
+        router.replace(`/${user.role}`)
+      }
     }
   }, [user, isLoading, router])
 

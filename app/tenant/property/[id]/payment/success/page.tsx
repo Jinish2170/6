@@ -1,19 +1,47 @@
+"use client"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Check } from "lucide-react"
 import Link from "next/link"
-import { use } from "react"
+import { use, useEffect, useState } from "react"
 
 export default function PaymentSuccessPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
-  
-  // Transaction details
-  const transactionDetails = {
-    id: "TXN-" + Math.floor(Math.random() * 1000000),
-    date: new Date().toLocaleDateString(),
-    amount: 7500,
-    property: "Modern Apartment with City View",
-  }
+  const [transactionDetails, setTransactionDetails] = useState({
+    id: "",
+    date: "",
+    amount: 0,
+    property: "",
+  })
+
+  useEffect(() => {
+    // Try to get payment confirmation from localStorage
+    const paymentConfirmation = localStorage.getItem('paymentConfirmation')
+    if (paymentConfirmation) {
+      try {
+        const parsedData = JSON.parse(paymentConfirmation)
+        setTransactionDetails({
+          id: `TXN-${Date.now()}`,
+          date: new Date().toLocaleDateString(),
+          amount: parsedData.amount || 0,
+          property: parsedData.propertyTitle || "Property Name Not Available",
+        })
+        // Clear the stored data after use
+        localStorage.removeItem('paymentConfirmation')
+      } catch (error) {
+        console.error('Error parsing payment confirmation:', error)
+      }
+    } else {
+      // Fallback if no data available
+      setTransactionDetails({
+        id: `TXN-${Date.now()}`,
+        date: new Date().toLocaleDateString(),
+        amount: 0,
+        property: "Payment processed successfully",
+      })
+    }
+  }, [])
 
   return (
     <div className="container mx-auto flex min-h-[80vh] items-center justify-center px-4 py-6">
@@ -39,7 +67,12 @@ export default function PaymentSuccessPage({ params }: { params: Promise<{ id: s
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Amount:</span>
-                <span className="font-medium">${transactionDetails.amount.toLocaleString()}</span>
+                <span className="font-medium">
+                  {transactionDetails.amount > 0 
+                    ? `$${transactionDetails.amount.toLocaleString()}` 
+                    : "Amount not available"
+                  }
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Property:</span>
@@ -56,7 +89,7 @@ export default function PaymentSuccessPage({ params }: { params: Promise<{ id: s
             <Link href="/tenant/dashboard">Go to Dashboard</Link>
           </Button>
           <Button variant="outline" className="w-full rounded-full" asChild>
-            <Link href={`/tenant/property/${params.id}`}>Back to Property</Link>
+            <Link href={`/tenant/property/${resolvedParams.id}`}>Back to Property</Link>
           </Button>
         </CardFooter>
       </Card>

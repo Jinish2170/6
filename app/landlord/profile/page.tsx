@@ -10,13 +10,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Camera, CreditCard, Facebook, Instagram, Linkedin, LogOut, Mail, Phone, Twitter, User } from "lucide-react"
+import { Camera, CreditCard, Facebook, Instagram, Linkedin, LogOut, Mail, Phone, Twitter, User, DollarSign } from "lucide-react"
 import { useState } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
+import type { ExtendedUser } from "@/lib/types"
 
 export default function LandlordProfilePage() {
-  const { user, updateProfile, logout } = useAuth()
+  const { user, updateProfile, logout } = useAuth() as { 
+    user: ExtendedUser | null; 
+    updateProfile: (userData: Partial<ExtendedUser>) => Promise<boolean>;
+    logout: () => void;
+  }
   const { toast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState({
@@ -303,7 +308,7 @@ export default function LandlordProfilePage() {
                           <p className="font-medium">Verification Status</p>
                           <p className="text-sm text-gray-500">Your business verification status</p>
                         </div>
-                        <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>
+                        <Badge className="bg-gray-100 text-gray-800">Not Started</Badge>
                       </div>
                       <Button className="w-full rounded-full bg-teal-600 hover:bg-teal-700">
                         Complete Verification
@@ -340,19 +345,12 @@ export default function LandlordProfilePage() {
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Payout Methods</h3>
                     <div className="rounded-xl border border-gray-200 p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100">
-                            <CreditCard className="h-5 w-5 text-gray-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Bank Account (Primary)</p>
-                            <p className="text-sm text-gray-500">Ending in 1234</p>
-                          </div>
+                      <div className="text-center py-6">
+                        <div className="mb-3 rounded-lg bg-gray-50 p-4">
+                          <CreditCard className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+                          <p className="text-sm text-gray-500 font-medium">No Payment Methods</p>
+                          <p className="text-xs text-gray-400 mt-1">Add a payment method to receive payouts</p>
                         </div>
-                        <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-50 hover:text-red-600">
-                          Remove
-                        </Button>
                       </div>
                     </div>
                     <Button className="rounded-full">
@@ -366,42 +364,23 @@ export default function LandlordProfilePage() {
                     <div className="rounded-xl border border-gray-200 p-4">
                       <div className="mb-4">
                         <p className="font-medium">Current Schedule</p>
-                        <p className="text-sm text-gray-500">Monthly (1st of each month)</p>
+                        <p className="text-sm text-gray-500">Not configured</p>
                       </div>
                       <Button variant="outline" className="rounded-full">
-                        Change Schedule
+                        Set Up Schedule
                       </Button>
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Transaction History</h3>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between rounded-xl border border-gray-100 p-3 shadow-sm">
-                        <div>
-                          <p className="font-medium">Payout - April 2023</p>
-                          <p className="text-sm text-gray-500">Apr 1, 2023</p>
-                        </div>
-                        <p className="font-bold text-teal-600">$7,500.00</p>
-                      </div>
-                      <div className="flex items-center justify-between rounded-xl border border-gray-100 p-3 shadow-sm">
-                        <div>
-                          <p className="font-medium">Payout - March 2023</p>
-                          <p className="text-sm text-gray-500">Mar 1, 2023</p>
-                        </div>
-                        <p className="font-bold text-teal-600">$7,500.00</p>
-                      </div>
-                      <div className="flex items-center justify-between rounded-xl border border-gray-100 p-3 shadow-sm">
-                        <div>
-                          <p className="font-medium">Payout - February 2023</p>
-                          <p className="text-sm text-gray-500">Feb 1, 2023</p>
-                        </div>
-                        <p className="font-bold text-teal-600">$7,500.00</p>
+                    <div className="text-center py-6">
+                      <div className="mb-3 rounded-lg bg-gray-50 p-4">
+                        <DollarSign className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+                        <p className="text-sm text-gray-500 font-medium">No Transactions Yet</p>
+                        <p className="text-xs text-gray-400 mt-1">Transaction history will appear here</p>
                       </div>
                     </div>
-                    <Button variant="link" className="px-0 text-teal-600">
-                      View All Transactions
-                    </Button>
                   </div>
                 </CardContent>
               </Card>

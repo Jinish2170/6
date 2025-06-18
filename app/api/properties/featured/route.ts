@@ -30,15 +30,18 @@ export async function GET(request: Request) {
                 image: images.find(img => img.is_featured)?.image_url || '/placeholder.svg',
                 features
             };
-        }));
-
-        // Sort properties by date and get the most recent ones
+        }));        // Sort properties by date and get the most recent ones
         const featuredProperties = propertiesWithDetails
             .sort((a, b) => {
                 // Sort more expensive properties first as featured
                 return b.price - a.price;
             })
-            .slice(0, 4); // Get top 4 properties
+            .slice(0, 8); // Increased to show more properties
+        
+        // Mark all properties as AVAILABLE for consistency
+        featuredProperties.forEach(property => {
+            property.status = 'AVAILABLE';
+        });
 
         // Return response with cache control headers
         return NextResponse.json(featuredProperties, {

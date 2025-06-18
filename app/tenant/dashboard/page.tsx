@@ -21,64 +21,37 @@ import {
 import Image from "next/image"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
+import type { ExtendedUser } from "@/lib/types"
 
 export default function TenantDashboardPage() {
-  const { user } = useAuth()
+  const { user } = useAuth() as { user: ExtendedUser | null }
 
-  // Sample data
+  // This would typically come from an API call to get the user's current lease
   const currentLease = {
-    property: "Modern Apartment with City View",
-    address: "123 Main St, Downtown, New York",
-    rent: 2500,
-    dueDate: "May 1, 2023",
-    status: "Paid",
+    property: "Loading...",
+    address: "Please wait while we load your lease information",
+    rent: 0,
+    dueDate: "Loading...",
+    status: "Loading",
     image: "/placeholder.svg?height=300&width=400",
   }
 
-  const maintenanceRequests = [
-    {
-      id: 1,
-      title: "Leaking Faucet in Bathroom",
-      date: "Apr 15, 2023",
-      status: "In Progress",
-      description: "The bathroom sink faucet is leaking water constantly.",
-    },
-    {
-      id: 2,
-      title: "AC Not Cooling",
-      date: "Apr 10, 2023",
-      status: "Scheduled",
-      description: "The air conditioner is running but not cooling the apartment.",
-    },
-    {
-      id: 3,
-      title: "Broken Light Fixture",
-      date: "Mar 28, 2023",
-      status: "Completed",
-      description: "The ceiling light fixture in the living room is not working.",
-    },
-  ]
+  // This would typically come from an API call to get maintenance requests
+  const maintenanceRequests: Array<{
+    id: number;
+    title: string;
+    date: string;
+    status: string;
+    description: string;
+  }> = []
 
-  const documents = [
-    {
-      id: 1,
-      title: "Lease Agreement",
-      date: "Jan 15, 2023",
-      type: "PDF",
-    },
-    {
-      id: 2,
-      title: "Move-in Inspection Report",
-      date: "Jan 16, 2023",
-      type: "PDF",
-    },
-    {
-      id: 3,
-      title: "Rent Payment Receipt - April",
-      date: "Apr 1, 2023",
-      type: "PDF",
-    },
-  ]
+  // This would typically come from an API call to get user documents
+  const documents: Array<{
+    id: number;
+    title: string;
+    date: string;
+    type: string;
+  }> = []
 
   if (!user) {
     return (
@@ -122,21 +95,21 @@ export default function TenantDashboardPage() {
                         <p className="text-xs text-gray-500">Bedrooms</p>
                         <div className="flex items-center justify-center">
                           <Bed className="mr-1 h-4 w-4 text-gray-700" />
-                          <p className="font-medium">2</p>
+                          <p className="font-medium">-</p>
                         </div>
                       </div>
                       <div className="rounded-lg bg-gray-50 p-2 text-center">
                         <p className="text-xs text-gray-500">Bathrooms</p>
                         <div className="flex items-center justify-center">
                           <Bath className="mr-1 h-4 w-4 text-gray-700" />
-                          <p className="font-medium">2</p>
+                          <p className="font-medium">-</p>
                         </div>
                       </div>
                       <div className="rounded-lg bg-gray-50 p-2 text-center">
                         <p className="text-xs text-gray-500">Area</p>
                         <div className="flex items-center justify-center">
                           <Square className="mr-1 h-4 w-4 text-gray-700" />
-                          <p className="font-medium">1200 ft²</p>
+                          <p className="font-medium">-</p>
                         </div>
                       </div>
                     </div>
@@ -184,40 +157,58 @@ export default function TenantDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {maintenanceRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex flex-col gap-4 rounded-xl border border-gray-100 p-4 shadow-sm md:flex-row md:items-center"
-                  >
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-teal-100">
-                      <Wrench className="h-5 w-5 text-teal-600" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="mb-1 flex items-center justify-between">
-                        <h3 className="font-medium">{request.title}</h3>
-                        <Badge
-                          className={
-                            request.status === "Completed"
-                              ? "bg-green-100 text-green-800 hover:bg-green-100"
-                              : request.status === "In Progress"
-                                ? "bg-blue-100 text-blue-800 hover:bg-blue-100"
-                                : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                          }
-                        >
-                          {request.status}
-                        </Badge>
+                {maintenanceRequests.length > 0 ? (
+                  maintenanceRequests.map((request) => (
+                    <div
+                      key={request.id}
+                      className="flex flex-col gap-4 rounded-xl border border-gray-100 p-4 shadow-sm md:flex-row md:items-center"
+                    >
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-teal-100">
+                        <Wrench className="h-5 w-5 text-teal-600" />
                       </div>
-                      <p className="text-sm text-gray-500">{request.description}</p>
-                      <div className="mt-2 flex items-center text-xs text-gray-500">
-                        <Clock className="mr-1 h-3 w-3" />
-                        <span>Submitted on {request.date}</span>
+                      <div className="flex-1">
+                        <div className="mb-1 flex items-center justify-between">
+                          <h3 className="font-medium">{request.title}</h3>
+                          <Badge
+                            className={
+                              request.status === "Completed"
+                                ? "bg-green-100 text-green-800 hover:bg-green-100"
+                                : request.status === "In Progress"
+                                  ? "bg-blue-100 text-blue-800 hover:bg-blue-100"
+                                  : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                            }
+                          >
+                            {request.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-500">{request.description}</p>
+                        <div className="mt-2 flex items-center text-xs text-gray-500">
+                          <Clock className="mr-1 h-3 w-3" />
+                          <span>Submitted on {request.date}</span>
+                        </div>
                       </div>
+                      <Button variant="ghost" size="sm" className="ml-auto flex-shrink-0 rounded-full md:ml-0">
+                        View Details
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="ml-auto flex-shrink-0 rounded-full md:ml-0">
-                      View Details
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="mb-4 rounded-lg bg-gray-50 p-6">
+                      <Wrench className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                      <p className="text-gray-500 font-medium">No Maintenance Requests</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        Submit a request if you need any repairs or maintenance
+                      </p>
+                    </div>
+                    <Button className="rounded-full" asChild>
+                      <Link href="/tenant/dashboard/maintenance/new">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Submit First Request
+                      </Link>
                     </Button>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
             <CardFooter className="flex justify-center">
@@ -238,7 +229,7 @@ export default function TenantDashboardPage() {
               </Avatar>
               <div>
                 <CardTitle>{user?.name}</CardTitle>
-                <CardDescription>Tenant since Jan 2023</CardDescription>
+                <CardDescription>Tenant</CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -249,7 +240,7 @@ export default function TenantDashboardPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-500">Phone</span>
-                  <span className="text-sm font-medium">{user?.phone || "(123) 456-7890"}</span>
+                  <span className="text-sm font-medium">{user?.phone || "Not provided"}</span>
                 </div>
               </div>
             </CardContent>
@@ -268,26 +259,36 @@ export default function TenantDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center justify-between rounded-lg border border-gray-100 p-3 shadow-sm"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-100">
-                        <FileText className="h-4 w-4 text-gray-600" />
+                {documents.length > 0 ? (
+                  documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between rounded-lg border border-gray-100 p-3 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-100">
+                          <FileText className="h-4 w-4 text-gray-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{doc.title}</p>
+                          <p className="text-xs text-gray-500">{doc.date}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">{doc.title}</p>
-                        <p className="text-xs text-gray-500">{doc.date}</p>
-                      </div>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                        <Download className="h-4 w-4" />
+                        <span className="sr-only">Download</span>
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
-                      <Download className="h-4 w-4" />
-                      <span className="sr-only">Download</span>
-                    </Button>
+                  ))
+                ) : (
+                  <div className="text-center py-6">
+                    <div className="mb-3 rounded-lg bg-gray-50 p-4">
+                      <FileText className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+                      <p className="text-sm text-gray-500 font-medium">No Documents Available</p>
+                      <p className="text-xs text-gray-400 mt-1">Documents will appear here when available</p>
+                    </div>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
             <CardFooter>

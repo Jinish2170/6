@@ -39,13 +39,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
     const checkUserSession = async () => {
       try {
-        const token = localStorage.getItem("token")
+        // First check if we have a cached user in state or localStorage
+        const cachedUserStr = localStorage.getItem("user");
+        if (cachedUserStr) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr);
+            if (isMounted && !user) {
+              setUser(cachedUser);
+            }
+          } catch (e) {
+            // Invalid JSON, will fetch from API below
+            localStorage.removeItem("user");
+          }
+        }
+        
+        const token = localStorage.getItem("token");
         if (token) {
-          // Add cache control to prevent repeated fetches
+          // Only fetch from API if necessary
           const response = await fetch('/api/auth/me', {
             headers: {
               'Authorization': `Bearer ${token}`,
-              'Cache-Control': 'no-cache' // Only fetch once per session
+              'Cache-Control': 'no-cache'
             },
             cache: 'force-cache'
           });
@@ -54,16 +68,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userData = await response.json();
             if (isMounted) {
               setUser(userData);
+              // Update cache
+              localStorage.setItem("user", JSON.stringify(userData));
             }
           } else {
             localStorage.removeItem("token");
             localStorage.removeItem("user");
+            if (isMounted) {
+              setUser(null);
+            }
           }
         }
       } catch (error) {
         console.error("Error checking user session:", error);
         localStorage.removeItem("token");
         localStorage.removeItem("user");
+        if (isMounted) {
+          setUser(null);
+        }
       } finally {
         if (isMounted) {
           setIsLoading(false);

@@ -9,6 +9,7 @@ export interface PropertyWithDetails extends Property {
 
 export interface ExtendedUser extends User {
     phone?: string;
+    address?: string;
 }
 
 export const propertySchema = z.object({

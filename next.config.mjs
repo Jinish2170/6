@@ -11,6 +11,16 @@ const nextConfig = {
   },
   // Ensure refresh and back navigation work properly
   trailingSlash: true,
+  // Add experimental settings for better file handling
+  experimental: {
+    serverComponentsExternalPackages: [],
+  },
+  // Add API routes configuration
+  api: {
+    bodyParser: {
+      sizeLimit: '20mb',
+    },
+  },
   // Improve static generation with rewrites
   async rewrites() {
     return [

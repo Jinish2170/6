@@ -8,12 +8,10 @@ import { Building, ChevronRight, DollarSign, Home, LineChart, Plus, Users, Wrenc
 import { ExtendedUser } from "@/lib/types"
 import Image from "next/image"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
-
-import { ExtendedUser } from '@/lib/types';
 
 interface Property {
     id: string;
@@ -56,13 +54,26 @@ export default function LandlordDashboardPage() {
     },
     recentProperties: []
   })
+  
   const { user } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
+  
+// Use a ref to track if data has been fetched
+  const dataFetched = useRef(false)
 
   useEffect(() => {
+    // Only fetch once per component mount
+    if (dataFetched.current || !user) {
+      return
+    }
+
     const fetchDashboardData = async () => {
       try {
+        setIsLoading(true)
+        // Set flag to prevent multiple fetches
+        dataFetched.current = true
+        
         const token = localStorage.getItem('token')
         if (!token) {
           router.push('/auth/login')
@@ -71,8 +82,13 @@ export default function LandlordDashboardPage() {
 
         const response = await fetch('/api/landlord/dashboard', {
           headers: {
-            'Authorization': `Bearer ${token}`
-          }
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-store',
+            'Pragma': 'no-cache'
+          },
+          // Prevent browser caching
+          cache: 'no-store',
+          next: { revalidate: 0 }
         })
 
         if (!response.ok) {
@@ -95,7 +111,7 @@ export default function LandlordDashboardPage() {
     }
 
     fetchDashboardData()
-  }, [router, toast])
+  }, [user]) // Only re-run if user changes
 
   if (isLoading) {
     return (
@@ -177,14 +193,16 @@ export default function LandlordDashboardPage() {
               <div className="h-80 w-full">
                 <div className="flex h-full items-center justify-center">
                   <div className="text-center">
-                    <Image
-                      src="/placeholder.svg?height=300&width=600"
-                      alt="Revenue Chart"
-                      width={400}
-                      height={300}
-                      className="mx-auto"
-                    />
-                    <p className="mt-4 text-gray-500">Monthly revenue chart would be displayed here</p>
+                    <div className="mb-4 rounded-lg bg-gray-50 p-8">
+                      <LineChart className="mx-auto h-16 w-16 text-gray-300 mb-4" />
+                      <p className="text-gray-500 font-medium">Revenue Analytics</p>
+                      <p className="text-sm text-gray-400 mt-2">
+                        {propertyStats.totalRevenue > 0 
+                          ? `Current monthly revenue: $${propertyStats.totalRevenue.toLocaleString()}`
+                          : "Start renting properties to see revenue analytics"
+                        }
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -199,7 +217,7 @@ export default function LandlordDashboardPage() {
                 <CardDescription>Manage your rental properties</CardDescription>
               </div>
               <Button className="rounded-full" asChild>
-                <Link href="/landlord/add-property">
+                <Link href="/landlord/properties/add">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Property
                 </Link>
@@ -207,48 +225,66 @@ export default function LandlordDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentProperties.map((property) => (
-                  <div
-                    key={property.id}
-                    className="flex flex-col gap-4 rounded-xl border border-gray-100 p-4 shadow-sm md:flex-row md:items-center"
-                  >
-                    <div className="relative h-24 w-full overflow-hidden rounded-xl md:w-36">
-                      <Image
-                        src={property.image || "/placeholder.svg"}
-                        alt={property.title}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <div className="mb-1 flex items-center justify-between">
-                        <h3 className="font-medium">{property.title}</h3>
-                        <Badge
-                          className={
-                            property.status === "RENTED"
-                              ? "bg-green-100 text-green-800 hover:bg-green-100"
-                              : property.status === "MAINTENANCE"
-                              ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                              : "bg-blue-100 text-blue-800 hover:bg-blue-100"
-                          }
-                        >
-                          {property.status === 'RENTED' ? 'Occupied' : 
-                           property.status === 'MAINTENANCE' ? 'Maintenance' : 'Available'}
-                        </Badge>
+                {recentProperties.length > 0 ? (
+                  recentProperties.map((property) => (
+                    <div
+                      key={property.id}
+                      className="flex flex-col gap-4 rounded-xl border border-gray-100 p-4 shadow-sm md:flex-row md:items-center"
+                    >
+                      <div className="relative h-24 w-full overflow-hidden rounded-xl md:w-36">
+                        <Image
+                          src={property.image || "/placeholder.svg"}
+                          alt={property.title}
+                          fill
+                          className="object-cover"
+                        />
                       </div>
-                      <p className="text-sm text-gray-500">{property.location}</p>
-                      <div className="mt-2 flex items-center justify-between">
-                        <p className="font-bold text-teal-600">${property.price}/mo</p>
-                        <Button variant="ghost" size="sm" className="rounded-full" asChild>
-                          <Link href={`/landlord/properties/${property.id}`}>
-                            View Details
-                            <ChevronRight className="ml-1 h-4 w-4" />
-                          </Link>
-                        </Button>
+                      <div className="flex-1">
+                        <div className="mb-1 flex items-center justify-between">
+                          <h3 className="font-medium">{property.title}</h3>
+                          <Badge
+                            className={
+                              property.status === "RENTED"
+                                ? "bg-green-100 text-green-800 hover:bg-green-100"
+                                : property.status === "MAINTENANCE"
+                                ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                                : "bg-blue-100 text-blue-800 hover:bg-blue-100"
+                            }
+                          >
+                            {property.status === 'RENTED' ? 'Occupied' : 
+                             property.status === 'MAINTENANCE' ? 'Maintenance' : 'Available'}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-500">{property.location}</p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <p className="font-bold text-teal-600">${property.price}/mo</p>
+                          <Button variant="ghost" size="sm" className="rounded-full" asChild>
+                            <Link href={`/landlord/properties/${property.id}`}>
+                              View Details
+                              <ChevronRight className="ml-1 h-4 w-4" />
+                            </Link>
+                          </Button>
+                        </div>
                       </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="mb-4 rounded-lg bg-gray-50 p-6">
+                      <Building className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                      <p className="text-gray-500 font-medium">No Properties Yet</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        Add your first property to start managing your rental business
+                      </p>
+                    </div>
+                    <Button className="rounded-full" asChild>
+                      <Link href="/landlord/properties/add">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Your First Property
+                      </Link>
+                    </Button>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
             <CardFooter className="flex justify-center">
@@ -281,8 +317,8 @@ export default function LandlordDashboardPage() {
                   <span className="text-sm font-medium">{user?.email || 'Loading...'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Phone</span>
-                  <span className="text-sm font-medium">{user?.phone || 'Not provided'}</span>
+                  <span className="text-sm text-gray-500">Role</span>
+                  <span className="text-sm font-medium">Landlord</span>
                 </div>
               </div>
             </CardContent>
@@ -300,22 +336,33 @@ export default function LandlordDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentProperties.filter(p => p.status === 'MAINTENANCE').map((property) => (                  <div key={property.id} className="flex gap-3">
-                    <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
-                      <Wrench className="h-5 w-5 text-orange-600" />
+                {recentProperties.filter(p => p.status === 'MAINTENANCE').length > 0 ? (
+                  recentProperties.filter(p => p.status === 'MAINTENANCE').map((property) => (
+                    <div key={property.id} className="flex gap-3">
+                      <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
+                        <Wrench className="h-5 w-5 text-orange-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{property.title}</p>
+                        <p className="text-sm text-gray-500">{property.location}</p>
+                        <Button variant="ghost" size="sm" className="mt-2 rounded-full" asChild>
+                          <Link href={`/landlord/properties/${property.id}`}>
+                            View Details
+                            <ChevronRight className="ml-1 h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{property.title}</p>
-                      <p className="text-sm text-gray-500">{property.location}</p>
-                      <Button variant="ghost" size="sm" className="mt-2 rounded-full" asChild>
-                        <Link href={`/landlord/properties/${property.id}`}>
-                          View Details
-                          <ChevronRight className="ml-1 h-4 w-4" />
-                        </Link>
-                      </Button>
+                  ))
+                ) : (
+                  <div className="text-center py-6">
+                    <div className="mb-3 rounded-lg bg-green-50 p-4">
+                      <Wrench className="mx-auto h-8 w-8 text-green-500 mb-2" />
+                      <p className="text-sm text-green-600 font-medium">All properties in good condition</p>
+                      <p className="text-xs text-green-500 mt-1">No maintenance requests at this time</p>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
             <CardFooter>

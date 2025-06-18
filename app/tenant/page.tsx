@@ -11,6 +11,7 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
+import { PropertyCard } from "@/components/tenant/property-card"
 
 interface Property {
   id: string
@@ -31,6 +32,7 @@ interface Property {
 
 export default function TenantHomePage() {
   const [featuredProperties, setFeaturedProperties] = useState<Property[]>([])
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
@@ -40,7 +42,7 @@ export default function TenantHomePage() {
     // Create a flag to track if the component is mounted
     let isMounted = true;
     
-    const fetchFeaturedProperties = async () => {
+    const fetchData = async () => {
       try {
         const token = localStorage.getItem("token")
         if (!token) {
@@ -48,27 +50,43 @@ export default function TenantHomePage() {
           return
         }
 
-        // Add cache control parameters to prevent repeated calls
-        const response = await fetch("/api/properties/featured", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          // Add cache control to prevent repeated fetches
-          cache: 'force-cache'
-        })
+        // Fetch properties and favorites in parallel
+        const [propertiesResponse, favoritesResponse] = await Promise.all([
+          fetch("/api/properties/featured", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            cache: 'no-cache' // Disable cache to get fresh data
+          }),
+          fetch("/api/favorites", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            cache: 'no-cache'
+          })
+        ]);
 
-        if (!response.ok) {
+        if (!propertiesResponse.ok) {
           throw new Error("Failed to fetch featured properties")
         }
 
-        const data = await response.json()
+        const propertiesData = await propertiesResponse.json()
+        
+        // Get favorite IDs
+        let favorites: string[] = [];
+        if (favoritesResponse.ok) {
+          const favoritesData = await favoritesResponse.json();
+          favorites = favoritesData.map((fav: any) => fav.id);
+        }
+
         // Only update state if component is still mounted
         if (isMounted) {
-          setFeaturedProperties(data)
+          setFeaturedProperties(propertiesData)
+          setFavoriteIds(favorites)
           setLoading(false)
         }
       } catch (error) {
-        console.error("Error fetching featured properties:", error)
+        console.error("Error fetching data:", error)
         if (isMounted) {
           setError("Failed to load properties")
           setLoading(false)
@@ -81,7 +99,7 @@ export default function TenantHomePage() {
       }
     }
 
-    fetchFeaturedProperties()
+    fetchData()
     
     // Cleanup function to prevent state updates after unmount
     return () => {
@@ -104,6 +122,24 @@ export default function TenantHomePage() {
       </div>
     )
   }
+
+  // Update all property cards with favorite status
+  const renderPropertyCard = (property: Property) => (
+    <PropertyCard
+      key={property.id}
+      id={property.id}
+      title={property.title}
+      location={property.location}
+      price={property.price}
+      bedrooms={property.bedrooms}
+      bathrooms={property.bathrooms}
+      area={property.area}
+      status={property.status}
+      image={property.image}
+      isNew={property.status === "new"}
+      isFavorite={favoriteIds.includes(property.id)}
+    />
+  );
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -137,49 +173,8 @@ export default function TenantHomePage() {
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {featuredProperties
-            .filter((p) => p.status === "featured")
-            .map((property) => (
-              <Link href={`/tenant/property/${property.id}`} key={property.id}>
-                <Card className="h-full overflow-hidden rounded-[1.5rem] border-0 shadow-md transition-all hover:-translate-y-1 hover:shadow-lg">
-                  <div className="relative">
-                    <Image
-                      src={property.image || "/placeholder.svg"}
-                      alt={property.title}
-                      width={400}
-                      height={300}
-                      className="h-48 w-full object-cover"
-                    />
-                    {property.status === "new" && (
-                      <Badge className="absolute left-3 top-3 bg-teal-600 text-white hover:bg-teal-700">New</Badge>
-                    )}
-                  </div>
-                  <CardContent className="p-4">
-                    <div className="mb-2 flex items-start justify-between">
-                      <h3 className="font-bold line-clamp-1">{property.title}</h3>
-                      <p className="ml-2 whitespace-nowrap font-bold text-teal-600">${property.price}/mo</p>
-                    </div>
-                    <div className="mb-3 flex items-center text-sm text-gray-500">
-                      <MapPin className="mr-1 h-4 w-4" />
-                      <span className="line-clamp-1">{property.location}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm text-gray-600">
-                      <div className="flex items-center">
-                        <Bed className="mr-1 h-4 w-4" />
-                        <span>{property.bedrooms} Beds</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Bath className="mr-1 h-4 w-4" />
-                        <span>{property.bathrooms} Baths</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Square className="mr-1 h-4 w-4" />
-                        <span>{property.area} ft²</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+            .filter((p) => p.status === "AVAILABLE")
+            .map((property) => renderPropertyCard(property))}
         </div>
       </section>
 
@@ -217,183 +212,28 @@ export default function TenantHomePage() {
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {featuredProperties
             .filter((p) => p.status === "AVAILABLE")
-            .map((property) => (
-                <Link href={`/tenant/property/${property.id}/`} key={property.id} prefetch={true}>
-                  <Card className="h-full overflow-hidden rounded-[1.5rem] border-0 shadow-md transition-all hover:-translate-y-1 hover:shadow-lg">
-                    <div className="relative">
-                      <Image
-                        src={property.image || "/placeholder.svg"}
-                        alt={property.title}
-                        width={400}
-                        height={300}
-                        className="h-48 w-full object-cover"
-                      />
-                      {property.status === "new" && (
-                        <Badge className="absolute left-3 top-3 bg-teal-600 text-white hover:bg-teal-700">New</Badge>
-                      )}
-                    </div>
-                    <CardContent className="p-4">
-                      <div className="mb-2 flex items-start justify-between">
-                        <h3 className="font-bold line-clamp-1">{property.title}</h3>
-                        <p className="ml-2 whitespace-nowrap font-bold text-teal-600">${property.price}/mo</p>
-                      </div>
-                      <div className="mb-3 flex items-center text-sm text-gray-500">
-                        <MapPin className="mr-1 h-4 w-4" />
-                        <span className="line-clamp-1">{property.location}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm text-gray-600">
-                        <div className="flex items-center">
-                          <Bed className="mr-1 h-4 w-4" />
-                          <span>{property.bedrooms} Beds</span>
-                        </div>
-                        <div className="flex items-center">
-                          <Bath className="mr-1 h-4 w-4" />
-                          <span>{property.bathrooms} Baths</span>
-                        </div>
-                        <div className="flex items-center">
-                          <Square className="mr-1 h-4 w-4" />
-                          <span>{property.area} ft²</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
+            .map((property) => renderPropertyCard(property))}
             </div>
           </TabsContent>
           <TabsContent value="apartments" className="mt-0">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {featuredProperties
                 .filter((property) => property.features.some((feature) => feature.name === "Apartment"))
-                .map((property) => (
-                  <Link href={`/tenant/property/${property.id}`} key={property.id}>
-                    <Card className="h-full overflow-hidden rounded-[1.5rem] border-0 shadow-md transition-all hover:-translate-y-1 hover:shadow-lg">
-                      <div className="relative">
-                        <Image
-                          src={property.image || "/placeholder.svg"}
-                          alt={property.title}
-                          width={400}
-                          height={300}
-                          className="h-48 w-full object-cover"
-                        />
-                      </div>
-                      <CardContent className="p-4">
-                        <div className="mb-2 flex items-start justify-between">
-                          <h3 className="font-bold line-clamp-1">{property.title}</h3>
-                          <p className="ml-2 whitespace-nowrap font-bold text-teal-600">${property.price}/mo</p>
-                        </div>
-                        <div className="mb-3 flex items-center text-sm text-gray-500">
-                          <MapPin className="mr-1 h-4 w-4" />
-                          <span className="line-clamp-1">{property.location}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm text-gray-600">
-                          <div className="flex items-center">
-                            <Bed className="mr-1 h-4 w-4" />
-                            <span>{property.bedrooms} Beds</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Bath className="mr-1 h-4 w-4" />
-                            <span>{property.bathrooms} Baths</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Square className="mr-1 h-4 w-4" />
-                            <span>{property.area} ft²</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
+                .map((property) => renderPropertyCard(property))}
             </div>
           </TabsContent>
           <TabsContent value="houses" className="mt-0">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {featuredProperties
                 .filter((property) => property.features.some((feature) => feature.name === "House"))
-                .map((property) => (
-                  <Link href={`/tenant/property/${property.id}`} key={property.id}>
-                    <Card className="h-full overflow-hidden rounded-[1.5rem] border-0 shadow-md transition-all hover:-translate-y-1 hover:shadow-lg">
-                      <div className="relative">
-                        <Image
-                          src={property.image || "/placeholder.svg"}
-                          alt={property.title}
-                          width={400}
-                          height={300}
-                          className="h-48 w-full object-cover"
-                        />
-                      </div>
-                      <CardContent className="p-4">
-                        <div className="mb-2 flex items-start justify-between">
-                          <h3 className="font-bold line-clamp-1">{property.title}</h3>
-                          <p className="ml-2 whitespace-nowrap font-bold text-teal-600">${property.price}/mo</p>
-                        </div>
-                        <div className="mb-3 flex items-center text-sm text-gray-500">
-                          <MapPin className="mr-1 h-4 w-4" />
-                          <span className="line-clamp-1">{property.location}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm text-gray-600">
-                          <div className="flex items-center">
-                            <Bed className="mr-1 h-4 w-4" />
-                            <span>{property.bedrooms} Beds</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Bath className="mr-1 h-4 w-4" />
-                            <span>{property.bathrooms} Baths</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Square className="mr-1 h-4 w-4" />
-                            <span>{property.area} ft²</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
+                .map((property) => renderPropertyCard(property))}
             </div>
           </TabsContent>
           <TabsContent value="villas" className="mt-0">
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {featuredProperties
                 .filter((property) => property.features.some((feature) => feature.name === "Villa"))
-                .map((property) => (
-                  <Link href={`/tenant/property/${property.id}`} key={property.id}>
-                    <Card className="h-full overflow-hidden rounded-[1.5rem] border-0 shadow-md transition-all hover:-translate-y-1 hover:shadow-lg">
-                      <div className="relative">
-                        <Image
-                          src={property.image || "/placeholder.svg"}
-                          alt={property.title}
-                          width={400}
-                          height={300}
-                          className="h-48 w-full object-cover"
-                        />
-                      </div>
-                      <CardContent className="p-4">
-                        <div className="mb-2 flex items-start justify-between">
-                          <h3 className="font-bold line-clamp-1">{property.title}</h3>
-                          <p className="ml-2 whitespace-nowrap font-bold text-teal-600">${property.price}/mo</p>
-                        </div>
-                        <div className="mb-3 flex items-center text-sm text-gray-500">
-                          <MapPin className="mr-1 h-4 w-4" />
-                          <span className="line-clamp-1">{property.location}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm text-gray-600">
-                          <div className="flex items-center">
-                            <Bed className="mr-1 h-4 w-4" />
-                            <span>{property.bedrooms} Beds</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Bath className="mr-1 h-4 w-4" />
-                            <span>{property.bathrooms} Baths</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Square className="mr-1 h-4 w-4" />
-                            <span>{property.area} ft²</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
+                .map((property) => renderPropertyCard(property))}
             </div>
           </TabsContent>
         </Tabs>

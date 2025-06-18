@@ -1,78 +1,84 @@
-import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { saveUploadedFile } from '@/lib/upload';
 
-export async function POST(request: Request) {
+// Configure API route to handle larger payloads
+export const runtime = 'nodejs';
+export const maxDuration = 30;
+
+export async function POST(request: NextRequest) {
     try {
-        // Verify authentication
+        console.log('=== UPLOAD API START ===');
+        
+        // Verify authentication first
         const user = await auth(request);
         if (!user) {
+            console.log('Authentication failed');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Handle file upload
-        let formData;
+        console.log('User authenticated:', user.id);
+        console.log('Request content-type:', request.headers.get('content-type'));
+
+        // Check if request has a body
+        if (!request.body) {
+            console.error('No request body found');
+            return NextResponse.json({ error: 'No request body' }, { status: 400 });
+        }
+
+        if (request.bodyUsed) {
+            console.error('Request body already consumed');
+            return NextResponse.json({ error: 'Request body already consumed' }, { status: 400 });
+        }
+
+        // Parse FormData
+        let formData: FormData;
         try {
+            console.log('Attempting to parse FormData...');
             formData = await request.formData();
-        } catch (error) {
-            return NextResponse.json({ error: 'Invalid form data' }, { status: 400 });
-        }
-
-        const file = formData.get('file') as File;
-        if (!file) {
-            return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-        }
-
-        // Verify file type
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
-        const fileType = file.type.toLowerCase();
-        if (!allowedTypes.includes(fileType)) {
+            console.log('✓ FormData parsed successfully');
+        } catch (parseError) {
+            console.error('✗ FormData parsing failed:', parseError);
+            
             return NextResponse.json({ 
-                error: `Invalid file type: ${fileType}. Supported formats: JPG, PNG, WEBP, HEIC` 
+                error: 'Failed to parse multipart form data',
+                details: parseError instanceof Error ? parseError.message : 'Unknown parsing error',
+                type: parseError instanceof Error ? parseError.constructor.name : 'Unknown'
             }, { status: 400 });
         }
 
-        // Check file size (10MB limit)
-        const maxSize = 10 * 1024 * 1024; // 10MB
-        if (file.size > maxSize) {
-            return NextResponse.json({ error: 'File too large. Maximum size is 10MB' }, { status: 400 });
+        // Log all FormData entries for debugging
+        const entries = Array.from(formData.entries());
+        console.log('FormData entries:', entries.map(([key, value]) => [
+            key, 
+            typeof value, 
+            value instanceof File ? `File: ${value.name} (${value.size} bytes, ${value.type})` : value
+        ]));
+
+        // Get the file
+        const file = formData.get('file') as File | null;
+        
+        if (!file || !(file instanceof File)) {
+            console.error('No valid file found in FormData');
+            return NextResponse.json({ error: 'No file provided or invalid file format' }, { status: 400 });
         }
 
-        // Create upload directory if it doesn't exist
-        const uploadDir = path.join(process.cwd(), 'public/uploads');
-        try {
-            await fs.mkdir(uploadDir, { recursive: true });
-        } catch (error) {
-            console.error('Error creating upload directory:', error);
-            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+        // Use the upload utility
+        const result = await saveUploadedFile(file, user.id);
+        
+        if (!result.success) {
+            return NextResponse.json({ error: result.error }, { status: 400 });
         }
+        
+        return NextResponse.json(result);
 
-        // Generate unique filename using user ID for better organization
-        const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '');
-        const ext = path.extname(cleanFileName);
-        const timestamp = Date.now();
-        const randomStr = Math.random().toString(36).substr(2, 9);
-        const filename = `${user.id}-${timestamp}-${randomStr}${ext}`;
-        const filepath = path.join(uploadDir, filename);
-
-        // Write file
-        try {
-            const bytes = await file.arrayBuffer();
-            const buffer = Buffer.from(bytes);
-            await fs.writeFile(filepath, buffer);
-        } catch (error) {
-            console.error('Error writing file:', error);
-            return NextResponse.json({ error: 'Failed to save file' }, { status: 500 });
-        }
-
-        // Return the URL
-        const fileUrl = `/uploads/${filename}`;
-        return NextResponse.json({ url: fileUrl });
     } catch (error) {
-        console.error('Error uploading file:', error);
+        console.error('Upload API error:', error);
+        
         return NextResponse.json({ 
-            error: error instanceof Error ? error.message : 'Failed to upload file' 
+            error: 'Upload failed',
+            details: error instanceof Error ? error.message : 'Unknown error',
+            stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined
         }, { status: 500 });
     }
 }

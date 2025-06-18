@@ -107,16 +107,25 @@ export default function AddPropertyPage() {
       formData.set('features', JSON.stringify(selectedFeatureIds))
 
       // Remove any previous image entries
-      formData.delete('images')
+      formData.delete('images');
       // Add each file as a separate 'images' entry
-      files.forEach(file => {
-        formData.append('images', file)
-      })
+      if (files.length > 0) {
+        console.log(`Preparing to upload ${files.length} images`);
+        files.forEach((file, index) => {
+          console.log(`Adding file ${index + 1}/${files.length} to form: ${file.name}, size: ${file.size}, type: ${file.type}`);
+          formData.append('images', file);
+        });
+      } else {
+        console.log('No images to upload');
+      }
 
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('Authentication token not found');
       }
+
+      // Log the request for debugging
+      console.log('Submitting property with images:', files.length);
 
       const response = await fetch('/api/properties', {
         method: 'POST',
@@ -127,8 +136,9 @@ export default function AddPropertyPage() {
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to add property')
+        const errorData = await response.json();
+        console.error('Property creation error response:', errorData);
+        throw new Error(errorData.error || 'Failed to add property');
       }
 
       const data = await response.json()

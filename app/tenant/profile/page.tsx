@@ -15,9 +15,14 @@ import { Camera, CreditCard, Facebook, Instagram, Linkedin, LogOut, Mail, Phone,
 import { useState } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
+import type { ExtendedUser } from "@/lib/types"
 
 export default function ProfilePage() {
-  const { user, updateProfile, logout } = useAuth()
+  const { user, updateProfile, logout } = useAuth() as { 
+    user: ExtendedUser | null; 
+    updateProfile: (userData: Partial<ExtendedUser>) => Promise<boolean>;
+    logout: () => void;
+  }
   const { toast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState({
@@ -276,26 +281,14 @@ export default function ProfilePage() {
                 <CardContent className="space-y-6">
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Saved Payment Methods</h3>
-                    <div className="rounded-xl border border-gray-200 p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100">
-                            <CreditCard className="h-5 w-5 text-gray-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Visa ending in 4242</p>
-                            <p className="text-sm text-gray-500">Expires 12/25</p>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm" className="text-red-500 hover:bg-red-50 hover:text-red-600">
-                          Remove
-                        </Button>
-                      </div>
+                    <div className="rounded-xl border border-gray-200 p-8 text-center">
+                      <CreditCard className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                      <p className="text-gray-500 mb-4">No payment methods saved</p>
+                      <Button className="rounded-full">
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Add Payment Method
+                      </Button>
                     </div>
-                    <Button className="rounded-full">
-                      <CreditCard className="mr-2 h-4 w-4" />
-                      Add Payment Method
-                    </Button>
                   </div>
 
                   <div className="space-y-4">
@@ -311,32 +304,11 @@ export default function ProfilePage() {
 
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Payment History</h3>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between rounded-xl border border-gray-100 p-3 shadow-sm">
-                        <div>
-                          <p className="font-medium">Rent Payment - April 2023</p>
-                          <p className="text-sm text-gray-500">Apr 1, 2023</p>
-                        </div>
-                        <p className="font-bold text-teal-600">$2,500.00</p>
-                      </div>
-                      <div className="flex items-center justify-between rounded-xl border border-gray-100 p-3 shadow-sm">
-                        <div>
-                          <p className="font-medium">Rent Payment - March 2023</p>
-                          <p className="text-sm text-gray-500">Mar 1, 2023</p>
-                        </div>
-                        <p className="font-bold text-teal-600">$2,500.00</p>
-                      </div>
-                      <div className="flex items-center justify-between rounded-xl border border-gray-100 p-3 shadow-sm">
-                        <div>
-                          <p className="font-medium">Rent Payment - February 2023</p>
-                          <p className="text-sm text-gray-500">Feb 1, 2023</p>
-                        </div>
-                        <p className="font-bold text-teal-600">$2,500.00</p>
-                      </div>
+                    <div className="rounded-xl border border-gray-200 p-8 text-center">
+                      <CreditCard className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                      <p className="text-gray-500 mb-2">No payment history available</p>
+                      <p className="text-sm text-gray-400">Your rent payments will appear here once you make them</p>
                     </div>
-                    <Button variant="link" className="px-0 text-teal-600">
-                      View All Transactions
-                    </Button>
                   </div>
                 </CardContent>
               </Card>

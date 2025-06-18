@@ -44,8 +44,7 @@ export async function GET(request: Request) {
         const recentPropertiesWithDetails = recentProperties.map(property => {
             const images = allImages.filter(img => img.property_id === property.id);
             const features = allFeatures.filter(feat => feat.property_id === property.id);
-            
-            return {
+              return {
                 id: property.id,
                 title: property.title,
                 location: property.location,
@@ -55,7 +54,7 @@ export async function GET(request: Request) {
                 features
             };
         });
-
+        
         return NextResponse.json({
             propertyStats,
             recentProperties: recentPropertiesWithDetails
@@ -63,7 +62,6 @@ export async function GET(request: Request) {
             headers: {
                 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
             }
-        });
         });
     } catch (error) {
         console.error('Error fetching dashboard data:', error);
