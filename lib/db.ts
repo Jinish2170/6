@@ -159,6 +159,19 @@ export const db = {
         return id;
     },
 
+    async updateUser(id: string, updates: Partial<Pick<User, 'name' | 'phone'>>): Promise<void> {
+        const fields = Object.keys(updates);
+        if (fields.length === 0) return;
+
+        const setClause = fields.map(field => `${field} = ?`).join(', ');
+        const values = fields.map(field => updates[field as keyof typeof updates]);
+        
+        await query(
+            `UPDATE users SET ${setClause} WHERE id = ?`,
+            [...values, id]
+        );
+    },
+
     // Property related queries
     async getProperties(filters?: { status?: string; landlord_id?: string }): Promise<Property[]> {
         let sql = 'SELECT * FROM properties WHERE 1=1';

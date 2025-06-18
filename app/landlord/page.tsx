@@ -372,46 +372,7 @@ export default function LandlordDashboardPage() {
             </CardFooter>
           </Card>
 
-          {/* Quick Links */}
-          <Card className="rounded-[1.5rem] border-0 shadow-md">
-            <CardHeader>
-              <CardTitle>Quick Links</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col items-center justify-center rounded-xl py-4"
-                  asChild
-                >
-                  <Link href="/landlord/properties">
-                    <Building className="mb-2 h-5 w-5 text-teal-600" />
-                    <span className="text-xs">Properties</span>
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col items-center justify-center rounded-xl py-4"
-                  asChild
-                >
-                  <Link href="/landlord/tenants">
-                    <Users className="mb-2 h-5 w-5 text-teal-600" />
-                    <span className="text-xs">Tenants</span>
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto flex-col items-center justify-center rounded-xl py-4"
-                  asChild
-                >
-                  <Link href="/landlord/maintenance">
-                    <Wrench className="mb-2 h-5 w-5 text-teal-600" />
-                    <span className="text-xs">Maintenance</span>
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          
         </div>
       </div>
     </div>

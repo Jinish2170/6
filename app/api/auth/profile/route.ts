@@ -10,8 +10,7 @@ export async function PUT(request: Request) {
         }
 
         const updates = await request.json();
-        
-        // Validate and sanitize updates
+          // Validate and sanitize updates
         const allowedUpdates = ['name', 'phone'];
         const sanitizedUpdates: Record<string, any> = {};
         
@@ -21,11 +20,8 @@ export async function PUT(request: Request) {
             }
         }
 
-        // Update user in database
-        await db.query(
-            'UPDATE users SET ? WHERE id = ?',
-            [sanitizedUpdates, user.id]
-        );
+        // Update user in database using the updateUser method
+        await db.updateUser(user.id, sanitizedUpdates);
 
         // Get updated user data
         const updatedUser = await db.getUserById(user.id);
